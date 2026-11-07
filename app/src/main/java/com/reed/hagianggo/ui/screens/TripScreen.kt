@@ -26,6 +26,7 @@ import com.reed.hagianggo.domain.LocationMath
 import com.reed.hagianggo.model.*
 import com.reed.hagianggo.ui.MainViewModel
 import com.reed.hagianggo.ui.components.HaGiangLoopMap
+import com.reed.hagianggo.ui.components.RealMapView
 import com.reed.hagianggo.ui.theme.*
 import java.text.NumberFormat
 import java.util.Locale
@@ -47,6 +48,8 @@ fun TripScreen(
 
     var selectedZoneId by remember { mutableStateOf<String?>(null) }
     var showBudgetDialog by remember { mutableStateOf(false) }
+    var showRealMap by remember { mutableStateOf(true) }
+    var isMapFullscreen by remember { mutableStateOf(false) }
 
     val totalSpent = remember(expenses) { expenses.sumOf { it.amount } }
     val currencyFormatter = remember { NumberFormat.getNumberInstance(Locale("vi", "VN")) }
@@ -55,6 +58,25 @@ fun TripScreen(
     val displayedPlaces = remember(places, selectedZoneId) {
         if (selectedZoneId == null) places
         else places.filter { it.zoneId == selectedZoneId }
+    }
+
+    if (isMapFullscreen && showRealMap) {
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .background(Color.Black)
+        ) {
+            RealMapView(
+                places = displayedPlaces,
+                currentLat = currentLocation?.first,
+                currentLng = currentLocation?.second,
+                trackPoints = liveRideState.recentPoints,
+                isMapFullscreen = true,
+                onToggleFullscreen = { isMapFullscreen = false },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+        return
     }
 
     Scaffold(
@@ -76,7 +98,7 @@ fun TripScreen(
                 .padding(padding),
             contentPadding = PaddingValues(bottom = 88.dp)
         ) {
-            // 1. Interactive Loop Map
+            // 1. Interactive Map (Real Geographic OSM Map & Schematic Loop Map)
             item {
                 Card(
                     modifier = Modifier
@@ -94,38 +116,71 @@ fun TripScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = "BẢN ĐỒ VÒNG LẶP HÀ GIANG",
-                                style = MaterialTheme.typography.labelMedium.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 1.2.sp
-                                ),
-                                color = SunsetOrange
-                            )
-                            if (selectedZoneId != null) {
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(MaterialTheme.colorScheme.surface)
+                                    .padding(2.dp)
+                            ) {
+                                FilterChip(
+                                    selected = showRealMap,
+                                    onClick = { showRealMap = true },
+                                    label = { Text("🗺️ Bản đồ Thật", fontSize = 12.sp, fontWeight = if (showRealMap) FontWeight.Bold else FontWeight.Normal) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = SunsetOrange,
+                                        selectedLabelColor = Color.White
+                                    )
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                FilterChip(
+                                    selected = !showRealMap,
+                                    onClick = { showRealMap = false },
+                                    label = { Text("🔄 Sơ đồ 8 Chặng", fontSize = 12.sp, fontWeight = if (!showRealMap) FontWeight.Bold else FontWeight.Normal) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = HighlandGreen,
+                                        selectedLabelColor = Color.White
+                                    )
+                                )
+                            }
+
+                            if (!showRealMap && selectedZoneId != null) {
                                 TextButton(
                                     onClick = { selectedZoneId = null },
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
                                 ) {
-                                    Text("Xem tất cả", fontSize = 12.sp)
+                                    Text("Xem tất cả", fontSize = 11.sp)
                                 }
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
 
-                        HaGiangLoopMap(
-                            zones = zones,
-                            places = places,
-                            activeZoneId = selectedZoneId,
-                            currentLat = currentLocation?.first,
-                            currentLng = currentLocation?.second,
-                            trackPoints = liveRideState.recentPoints,
-                            onZoneSelected = { zone ->
-                                selectedZoneId = if (selectedZoneId == zone.id) null else zone.id
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        if (showRealMap) {
+                            RealMapView(
+                                places = displayedPlaces,
+                                currentLat = currentLocation?.first,
+                                currentLng = currentLocation?.second,
+                                trackPoints = liveRideState.recentPoints,
+                                isMapFullscreen = false,
+                                onToggleFullscreen = { isMapFullscreen = true },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(360.dp)
+                            )
+                        } else {
+                            HaGiangLoopMap(
+                                zones = zones,
+                                places = places,
+                                activeZoneId = selectedZoneId,
+                                currentLat = currentLocation?.first,
+                                currentLng = currentLocation?.second,
+                                trackPoints = liveRideState.recentPoints,
+                                onZoneSelected = { zone ->
+                                    selectedZoneId = if (selectedZoneId == zone.id) null else zone.id
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
                     }
                 }
             }
