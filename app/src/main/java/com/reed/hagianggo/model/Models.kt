@@ -233,3 +233,42 @@ val Zone.elevationMeters: Int get() = when (id) {
     else -> 300
 }
 
+data class RidePoint(
+    val id: Long = 0,
+    val sessionId: Long,
+    val lat: Double,
+    val lng: Double,
+    val altitude: Double,
+    val speedKmh: Float,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+data class RideSession(
+    val id: Long = 0,
+    val startTime: Long,
+    val endTime: Long = 0L,
+    val totalDistanceKm: Double = 0.0,
+    val maxSpeedKmh: Float = 0f,
+    val avgSpeedKmh: Float = 0f,
+    val maxAltitude: Double = 0.0,
+    val minAltitude: Double = 0.0,
+    val status: String = "RECORDING" // RECORDING, PAUSED, FINISHED
+)
+
+data class LiveRideState(
+    val isTracking: Boolean = false,
+    val isPaused: Boolean = false,
+    val sessionId: Long = 0L,
+    val currentSpeedKmh: Float = 0f,
+    val currentAltitude: Double = 0.0,
+    val totalDistanceKm: Double = 0.0,
+    val maxSpeedKmh: Float = 0f,
+    val maxAltitude: Double = 0.0,
+    val elapsedTimeSeconds: Long = 0L,
+    val nextMilestonePlace: Place? = null,
+    val distanceToNextKm: Double = 0.0,
+    val recentPoints: List<Pair<Double, Double>> = emptyList(),
+    val lastVisitedPlaceName: String? = null
+)
+
+

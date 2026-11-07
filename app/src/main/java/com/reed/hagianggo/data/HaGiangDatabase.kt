@@ -12,7 +12,7 @@ class HaGiangDatabase(private val context: Context) :
 
     companion object {
         const val DATABASE_NAME = "hagiang_go.db"
-        const val DATABASE_VERSION = 1
+        const val DATABASE_VERSION = 2
 
         @Volatile
         private var INSTANCE: HaGiangDatabase? = null
@@ -128,6 +128,36 @@ class HaGiangDatabase(private val context: Context) :
             """.trimIndent()
         )
 
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS ride_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                start_time INTEGER NOT NULL,
+                end_time INTEGER DEFAULT 0,
+                total_distance_km REAL DEFAULT 0,
+                max_speed_kmh REAL DEFAULT 0,
+                avg_speed_kmh REAL DEFAULT 0,
+                max_altitude REAL DEFAULT 0,
+                min_altitude REAL DEFAULT 0,
+                status TEXT DEFAULT 'RECORDING'
+            )
+            """.trimIndent()
+        )
+
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS ride_points (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id INTEGER NOT NULL,
+                lat REAL NOT NULL,
+                lng REAL NOT NULL,
+                altitude REAL NOT NULL,
+                speed REAL NOT NULL,
+                timestamp INTEGER NOT NULL
+            )
+            """.trimIndent()
+        )
+
         // Seed default config
         val configValues = ContentValues().apply {
             put("id", 1)
@@ -143,7 +173,36 @@ class HaGiangDatabase(private val context: Context) :
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // Migration logic for future versions
+        if (oldVersion < 2) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS ride_sessions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    start_time INTEGER NOT NULL,
+                    end_time INTEGER DEFAULT 0,
+                    total_distance_km REAL DEFAULT 0,
+                    max_speed_kmh REAL DEFAULT 0,
+                    avg_speed_kmh REAL DEFAULT 0,
+                    max_altitude REAL DEFAULT 0,
+                    min_altitude REAL DEFAULT 0,
+                    status TEXT DEFAULT 'RECORDING'
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS ride_points (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id INTEGER NOT NULL,
+                    lat REAL NOT NULL,
+                    lng REAL NOT NULL,
+                    altitude REAL NOT NULL,
+                    speed REAL NOT NULL,
+                    timestamp INTEGER NOT NULL
+                )
+                """.trimIndent()
+            )
+        }
     }
 
     fun seedIfEmpty() {
@@ -549,5 +608,61 @@ class HaGiangDatabase(private val context: Context) :
 
     fun deleteChecklistItem(id: Long) {
         writableDatabase.delete("checklist_items", "id = ?", arrayOf(id.toString()))
+    }
+
+    // ====== Live Ride Sessions & Tracking Points ======
+
+    fun createRideSession(): Long {
+        val cv = ContentValues().apply {
+            put("start_time", System.currentTimeMillis())
+            put("status", "RECORDING")
+        }
+        return writableDatabase.insert("ride_sessions", null, cv)
+    }
+
+    fun finishRideSession(
+        sessionId: Long,
+        totalDistKm: Double,
+        maxSpeedKmh: Float,
+        avgSpeedKmh: Float,
+        maxAlt: Double,
+        minAlt: Double
+    ) {
+        val cv = ContentValues().apply {
+            put("end_time", System.currentTimeMillis())
+            put("total_distance_km", totalDistKm)
+            put("max_speed_kmh", maxSpeedKmh)
+            put("avg_speed_kmh", avgSpeedKmh)
+            put("max_altitude", maxAlt)
+            put("min_altitude", minAlt)
+            put("status", "FINISHED")
+        }
+        writableDatabase.update("ride_sessions", cv, "id = ?", arrayOf(sessionId.toString()))
+    }
+
+    fun insertRidePoint(point: RidePoint): Long {
+        val cv = ContentValues().apply {
+            put("session_id", point.sessionId)
+            put("lat", point.lat)
+            put("lng", point.lng)
+            put("altitude", point.altitude)
+            put("speed", point.speedKmh)
+            put("timestamp", point.timestamp)
+        }
+        return writableDatabase.insert("ride_points", null, cv)
+    }
+
+    fun getRecentRidePoints(sessionId: Long, limit: Int = 120): List<Pair<Double, Double>> {
+        val list = mutableListOf<Pair<Double, Double>>()
+        val db = readableDatabase
+        val cursor = db.rawQuery(
+            "SELECT lat, lng FROM ride_points WHERE session_id = ? ORDER BY id ASC LIMIT ?",
+            arrayOf(sessionId.toString(), limit.toString())
+        )
+        while (cursor.moveToNext()) {
+            list.add(Pair(cursor.getDouble(0), cursor.getDouble(1)))
+        }
+        cursor.close()
+        return list
     }
 }

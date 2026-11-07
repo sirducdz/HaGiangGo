@@ -9,6 +9,7 @@ import com.reed.hagianggo.domain.LocationMath
 import com.reed.hagianggo.domain.OfflineLocationTracker
 import com.reed.hagianggo.domain.WhatNowEngine
 import com.reed.hagianggo.model.*
+import com.reed.hagianggo.service.RideTrackerService
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -285,6 +286,43 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearNotification() {
         _notificationMessage.value = null
+    }
+
+    // ====== Live Ride Tracking Controls ======
+
+    val liveRideState: StateFlow<LiveRideState> = RideTrackerService.liveRideState
+
+    private val _isCockpitOpen = MutableStateFlow(false)
+    val isCockpitOpen: StateFlow<Boolean> = _isCockpitOpen.asStateFlow()
+
+    fun openCockpit() {
+        _isCockpitOpen.value = true
+    }
+
+    fun closeCockpit() {
+        _isCockpitOpen.value = false
+    }
+
+    fun startRide() {
+        RideTrackerService.startRide(getApplication())
+        _isCockpitOpen.value = true
+        showNotification("Bắt đầu theo dõi hành trình phượt!")
+    }
+
+    fun pauseRide() {
+        RideTrackerService.pauseRide(getApplication())
+        showNotification("Đã tạm dừng chặng.")
+    }
+
+    fun resumeRide() {
+        RideTrackerService.resumeRide(getApplication())
+        showNotification("Tiếp tục hành trình.")
+    }
+
+    fun stopRide() {
+        RideTrackerService.stopRide(getApplication())
+        _isCockpitOpen.value = false
+        showNotification("Đã kết thúc và lưu chặng xe.")
     }
 
     private fun showNotification(msg: String) {

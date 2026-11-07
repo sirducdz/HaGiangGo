@@ -45,6 +45,7 @@ fun TodayScreen(
     val currentLocation by viewModel.currentLocation.collectAsState()
     val isOutsideHaGiang by viewModel.isOutsideHaGiang.collectAsState()
     val distanceToHaGiangKm by viewModel.distanceToHaGiangKm.collectAsState()
+    val liveRideState by viewModel.liveRideState.collectAsState()
 
     var selectedDay by remember { mutableIntStateOf(1) }
     var showZonePicker by remember { mutableStateOf(false) }
@@ -128,6 +129,123 @@ fun TodayScreen(
                             tint = Color.White.copy(alpha = 0.8f),
                             modifier = Modifier.size(18.dp)
                         )
+                    }
+                }
+            }
+
+            // 1.5. Live Ride Cockpit Card
+            item {
+                if (!liveRideState.isTracking) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { viewModel.startRide() },
+                        shape = RoundedCornerShape(18.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        border = androidx.compose.foundation.BorderStroke(1.5.dp, HighlandGreen.copy(alpha = 0.6f)),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(46.dp)
+                                    .clip(CircleShape)
+                                    .background(HighlandGreen.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.TwoWheeler,
+                                    contentDescription = null,
+                                    tint = HighlandGreen,
+                                    modifier = Modifier.size(26.dp)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.width(14.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "BẬT CHẾ ĐỘ PHƯỢT (LIVE RIDE)",
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = 0.5.sp
+                                    ),
+                                    color = HighlandGreen
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Đo độ cao mét, tốc độ GPS & tự động check-in",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
+                            Icon(
+                                Icons.Default.PlayArrow,
+                                contentDescription = null,
+                                tint = HighlandGreen,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                } else {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { viewModel.openCockpit() },
+                        shape = RoundedCornerShape(18.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.5.dp,
+                            if (liveRideState.isPaused) AmberGlow else HighlandGreen
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(12.dp)
+                                    .clip(CircleShape)
+                                    .background(if (liveRideState.isPaused) AmberGlow else HighlandGreen)
+                            )
+
+                            Spacer(modifier = Modifier.width(12.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = if (liveRideState.isPaused) "CHẶNG ĐANG TẠM DỪNG" else "ĐANG GHI HÀNH TRÌNH",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontWeight = FontWeight.Black,
+                                            letterSpacing = 0.8.sp
+                                        ),
+                                        color = if (liveRideState.isPaused) AmberGlow else HighlandGreen
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "${liveRideState.currentSpeedKmh.toInt()} km/h • ${liveRideState.currentAltitude.toInt()}m cao độ • Đã đi ${String.format(java.util.Locale.US, "%.1f", liveRideState.totalDistanceKm)} km",
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = Color.White
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Chạm để phóng to màn hình Cockpit HUD ➔",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.LightGray
+                                )
+                            }
+                        }
                     }
                 }
             }

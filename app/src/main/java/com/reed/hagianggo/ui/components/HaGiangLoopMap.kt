@@ -15,6 +15,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
@@ -34,6 +36,9 @@ fun HaGiangLoopMap(
     places: List<Place>,
     activeZoneId: String?,
     onZoneSelected: (Zone) -> Unit,
+    currentLat: Double? = null,
+    currentLng: Double? = null,
+    trackPoints: List<Pair<Double, Double>> = emptyList(),
     modifier: Modifier = Modifier
 ) {
     val textMeasurer = rememberTextMeasurer()
@@ -86,7 +91,44 @@ fun HaGiangLoopMap(
                     style = Stroke(width = 6.dp.toPx(), miter = 4f)
                 )
 
-                // 2. Vẽ các trạm chặng
+                // 2. Vẽ vệt hành trình GPS thực tế (nếu có)
+                if (trackPoints.size >= 2) {
+                    val trackPath = Path()
+                    val p0 = projectGpsToCanvas(trackPoints[0].first, trackPoints[0].second, width, height)
+                    trackPath.moveTo(p0.x, p0.y)
+                    for (i in 1 until trackPoints.size) {
+                        val pt = projectGpsToCanvas(trackPoints[i].first, trackPoints[i].second, width, height)
+                        trackPath.lineTo(pt.x, pt.y)
+                    }
+                    drawPath(
+                        path = trackPath,
+                        color = SunsetOrange,
+                        style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                    )
+                }
+
+                // 3. Vẽ vị trí Live GPS hiện tại
+                if (currentLat != null && currentLng != null) {
+                    val livePt = projectGpsToCanvas(currentLat, currentLng, width, height)
+                    // Vòng ngoài nhấp nháy
+                    drawCircle(
+                        color = Color(0xFF38BDF8).copy(alpha = 0.35f),
+                        radius = 14.dp.toPx(),
+                        center = livePt
+                    )
+                    drawCircle(
+                        color = Color(0xFF0284C7),
+                        radius = 6.dp.toPx(),
+                        center = livePt
+                    )
+                    drawCircle(
+                        color = Color.White,
+                        radius = 2.dp.toPx(),
+                        center = livePt
+                    )
+                }
+
+                // 4. Vẽ các trạm chặng
                 for (zone in sortedZones) {
                     val pt = coords[zone.seq] ?: continue
                     val isActive = zone.id == activeZoneId
@@ -167,4 +209,14 @@ private fun getNormalizedZoneCoords(width: Float, height: Float): Map<Int, Offse
         7 to Offset(width * 0.80f, height * 0.70f), // 7. Mèo Vạc (Góc đông nam)
         8 to Offset(width * 0.48f, height * 0.80f)  // 8. Mậu Duệ / Du Già (Về lại tây nam)
     )
+}
+
+private fun projectGpsToCanvas(lat: Double, lng: Double, width: Float, height: Float): Offset {
+    val minLat = 22.75
+    val maxLat = 23.40
+    val minLng = 104.85
+    val maxLng = 105.50
+    val xNorm = ((lng - minLng) / (maxLng - minLng)).coerceIn(0.05, 0.95).toFloat()
+    val yNorm = (1.0 - ((lat - minLat) / (maxLat - minLat))).coerceIn(0.05, 0.95).toFloat()
+    return Offset(width * (0.08f + xNorm * 0.84f), height * (0.08f + yNorm * 0.84f))
 }

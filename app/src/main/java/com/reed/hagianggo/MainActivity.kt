@@ -2,6 +2,7 @@ package com.reed.hagianggo
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -30,6 +31,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.reed.hagianggo.domain.LocationMath
 import com.reed.hagianggo.ui.MainViewModel
+import com.reed.hagianggo.ui.components.LiveRideCockpitSheet
 import com.reed.hagianggo.ui.components.PlaceFormDialog
 import com.reed.hagianggo.ui.components.WhatNowBottomSheet
 import com.reed.hagianggo.ui.screens.NearbyScreen
@@ -60,12 +62,14 @@ class MainActivity : ComponentActivity() {
                 val activeZone by viewModel.activeZone.collectAsState()
                 val currentLocation by viewModel.currentLocation.collectAsState()
                 val isOutsideHaGiang by viewModel.isOutsideHaGiang.collectAsState()
+                val liveRideState by viewModel.liveRideState.collectAsState()
+                val isCockpitOpen by viewModel.isCockpitOpen.collectAsState()
                 val notificationMessage by viewModel.notificationMessage.collectAsState()
 
                 val snackbarHostState = remember { SnackbarHostState() }
 
-                // Request Location Permission
-                val locationPermissionLauncher = rememberLauncherForActivityResult(
+                // Request Location & Notification Permission
+                val permissionLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.RequestMultiplePermissions()
                 ) { permissions ->
                     val fineGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true
@@ -81,13 +85,16 @@ class MainActivity : ComponentActivity() {
                         Manifest.permission.ACCESS_FINE_LOCATION
                     ) == PackageManager.PERMISSION_GRANTED
 
+                    val perms = mutableListOf(
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                    )
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        perms.add(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+
                     if (!hasFine) {
-                        locationPermissionLauncher.launch(
-                            arrayOf(
-                                Manifest.permission.ACCESS_FINE_LOCATION,
-                                Manifest.permission.ACCESS_COARSE_LOCATION
-                            )
-                        )
+                        permissionLauncher.launch(perms.toTypedArray())
                     }
                 }
 
@@ -227,6 +234,17 @@ class MainActivity : ComponentActivity() {
                         onSave = { place -> viewModel.savePlace(place) },
                         onDelete = { id -> viewModel.deletePlace(id) },
                         onDismiss = { viewModel.closePlaceFormDialog() }
+                    )
+                }
+
+                // Cockpit HUD Chạy xe (Live Ride Mode)
+                if (isCockpitOpen) {
+                    LiveRideCockpitSheet(
+                        state = liveRideState,
+                        onPause = { viewModel.pauseRide() },
+                        onResume = { viewModel.resumeRide() },
+                        onStop = { viewModel.stopRide() },
+                        onDismiss = { viewModel.closeCockpit() }
                     )
                 }
             }

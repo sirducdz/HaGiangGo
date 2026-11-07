@@ -42,6 +42,8 @@ fun TripScreen(
     val config by viewModel.tripConfig.collectAsState()
     val expenses by viewModel.expenses.collectAsState()
     val activeZone by viewModel.activeZone.collectAsState()
+    val currentLocation by viewModel.currentLocation.collectAsState()
+    val liveRideState by viewModel.liveRideState.collectAsState()
 
     var selectedZoneId by remember { mutableStateOf<String?>(null) }
     var showBudgetDialog by remember { mutableStateOf(false) }
@@ -116,6 +118,9 @@ fun TripScreen(
                             zones = zones,
                             places = places,
                             activeZoneId = selectedZoneId,
+                            currentLat = currentLocation?.first,
+                            currentLng = currentLocation?.second,
+                            trackPoints = liveRideState.recentPoints,
                             onZoneSelected = { zone ->
                                 selectedZoneId = if (selectedZoneId == zone.id) null else zone.id
                             },
