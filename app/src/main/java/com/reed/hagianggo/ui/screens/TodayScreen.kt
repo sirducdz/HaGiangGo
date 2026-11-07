@@ -43,6 +43,8 @@ fun TodayScreen(
     val activeZone by viewModel.activeZone.collectAsState()
     val isGpsEnabled by viewModel.isGpsEnabled.collectAsState()
     val currentLocation by viewModel.currentLocation.collectAsState()
+    val isOutsideHaGiang by viewModel.isOutsideHaGiang.collectAsState()
+    val distanceToHaGiangKm by viewModel.distanceToHaGiangKm.collectAsState()
 
     var selectedDay by remember { mutableIntStateOf(1) }
     var showZonePicker by remember { mutableStateOf(false) }
@@ -153,18 +155,21 @@ fun TodayScreen(
                             Icon(
                                 if (currentLocation != null) Icons.Default.GpsFixed else Icons.Default.GpsNotFixed,
                                 contentDescription = null,
-                                tint = if (currentLocation != null) HighlandGreen else SlateBlue,
+                                tint = if (isOutsideHaGiang) AmberGlow else if (currentLocation != null) HighlandGreen else SlateBlue,
                                 modifier = Modifier.size(20.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Column {
                                 Text(
-                                    text = if (currentLocation != null) "Vị trí GPS: Hoạt động" else "Chưa có tín hiệu GPS",
+                                    text = if (isOutsideHaGiang) "GPS: Ngoài Hà Giang (~${distanceToHaGiangKm?.toInt() ?: 0} km)"
+                                    else if (currentLocation != null) "Vị trí GPS: Hoạt động"
+                                    else "Chưa có tín hiệu GPS",
                                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = if (currentLocation != null) HighlandGreen else SlateBlue
+                                    color = if (isOutsideHaGiang) AmberGlow else if (currentLocation != null) HighlandGreen else SlateBlue
                                 )
                                 Text(
-                                    text = "Khu vực: ${activeZone?.name ?: "Chưa xác định"}",
+                                    text = if (isOutsideHaGiang) "Khu vực: ${activeZone?.name ?: "TP. Hà Giang"} (Xem trước)"
+                                    else "Khu vực: ${activeZone?.name ?: "Chưa xác định"}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )

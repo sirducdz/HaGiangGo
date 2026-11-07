@@ -59,6 +59,7 @@ class MainActivity : ComponentActivity() {
                 val zones by viewModel.zones.collectAsState()
                 val activeZone by viewModel.activeZone.collectAsState()
                 val currentLocation by viewModel.currentLocation.collectAsState()
+                val isOutsideHaGiang by viewModel.isOutsideHaGiang.collectAsState()
                 val notificationMessage by viewModel.notificationMessage.collectAsState()
 
                 val snackbarHostState = remember { SnackbarHostState() }
@@ -128,11 +129,12 @@ class MainActivity : ComponentActivity() {
                                                 modifier = Modifier
                                                     .size(6.dp)
                                                     .clip(CircleShape)
-                                                    .background(if (currentLocation != null) HighlandGreen else FuelGold)
+                                                    .background(if (isOutsideHaGiang) AmberGlow else if (currentLocation != null) HighlandGreen else FuelGold)
                                             )
                                             Spacer(modifier = Modifier.width(5.dp))
                                             Text(
-                                                text = activeZone?.name ?: "100% Offline",
+                                                text = if (isOutsideHaGiang) "${activeZone?.name ?: "TP. Hà Giang"} (Xem trước)"
+                                                else (activeZone?.name ?: "100% Offline"),
                                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold)
                                             )
                                         }

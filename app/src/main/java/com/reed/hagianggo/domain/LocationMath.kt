@@ -33,9 +33,23 @@ object LocationMath {
         return max(3, (hours * 60).roundToInt())
     }
 
-    fun findClosestZone(lat: Double, lng: Double, zones: List<Zone>): Zone? {
+    fun findClosestZone(lat: Double, lng: Double, zones: List<Zone>, maxRadiusKm: Double = 45.0): Zone? {
         if (zones.isEmpty()) return null
-        return zones.minByOrNull { calculateDistanceKm(lat, lng, it.centerLat, it.centerLng) }
+        val closest = zones.minByOrNull { calculateDistanceKm(lat, lng, it.centerLat, it.centerLng) } ?: return null
+        val dist = calculateDistanceKm(lat, lng, closest.centerLat, closest.centerLng)
+        // Nếu ở xa ngoài cung đường Hà Giang (> 45km, ví dụ ở Hải Dương / Hà Nội),
+        // mặc định chọn TP. Hà Giang (Điểm xuất phát Km0) thay vì tính góc lệch địa lý
+        return if (dist <= maxRadiusKm) {
+            closest
+        } else {
+            zones.firstOrNull { it.id == "tp_ha_giang" } ?: closest
+        }
+    }
+
+    fun isOutsideHaGiang(lat: Double, lng: Double, zones: List<Zone>, maxRadiusKm: Double = 45.0): Boolean {
+        if (zones.isEmpty()) return false
+        val minDist = zones.minOfOrNull { calculateDistanceKm(lat, lng, it.centerLat, it.centerLng) } ?: return false
+        return minDist > maxRadiusKm
     }
 
     fun openNavigationIntent(context: Context, lat: Double, lng: Double, label: String = "Điểm đến") {

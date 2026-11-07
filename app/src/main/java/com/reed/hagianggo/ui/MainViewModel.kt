@@ -63,6 +63,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
+    val isOutsideHaGiang: StateFlow<Boolean> = combine(
+        zones,
+        currentLocation,
+        locationTracker.manualOverrideZoneId
+    ) { allZones, loc, manualId ->
+        if (!manualId.isNullOrBlank()) false
+        else if (loc != null) LocationMath.isOutsideHaGiang(loc.first, loc.second, allZones)
+        else false
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    val distanceToHaGiangKm: StateFlow<Double?> = combine(
+        zones,
+        currentLocation
+    ) { allZones, loc ->
+        if (loc != null) {
+            val tpZone = allZones.firstOrNull { it.id == "tp_ha_giang" }
+            if (tpZone != null) {
+                LocationMath.calculateDistanceKm(loc.first, loc.second, tpZone.centerLat, tpZone.centerLng)
+            } else null
+        } else null
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
     // Gợi ý "Làm gì bây giờ?"
     @Suppress("UNCHECKED_CAST")
     val whatNowSuggestions: StateFlow<List<SuggestionResult>> = combine(
