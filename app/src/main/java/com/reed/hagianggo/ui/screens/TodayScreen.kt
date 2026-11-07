@@ -1,7 +1,9 @@
 package com.reed.hagianggo.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -26,6 +28,7 @@ import androidx.compose.ui.unit.sp
 import com.reed.hagianggo.domain.LocationMath
 import com.reed.hagianggo.model.*
 import com.reed.hagianggo.ui.MainViewModel
+import com.reed.hagianggo.ui.components.*
 import com.reed.hagianggo.ui.theme.*
 import java.util.Calendar
 
@@ -64,205 +67,203 @@ fun TodayScreen(
     val placesById = remember(places) { places.associateBy { it.id } }
 
     Scaffold(
-        modifier = modifier.fillMaxSize()
+        modifier = modifier.fillMaxSize(),
+        containerColor = AppBackground
     ) { padding ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(16.dp, 16.dp, 16.dp, 96.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            contentPadding = PaddingValues(16.dp, 12.dp, 16.dp, 96.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // 1. Big "LÀM GÌ BÂY GIỜ?" Action Button
+            // 1. Hero Action: "LÀM GÌ BÂY GIỜ?" (shadcn light callout)
             item {
-                Card(
+                ShadcnCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable { viewModel.openWhatNow() },
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = SunsetOrange),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    backgroundColor = SurfaceWhite,
+                    borderColor = ElectricOrangeBorder
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(20.dp),
+                            .padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(56.dp)
-                                .clip(CircleShape)
-                                .background(Color.White.copy(alpha = 0.25f)),
+                                .size(46.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(ElectricOrangeSoft)
+                                .border(BorderStroke(1.dp, ElectricOrangeBorder), RoundedCornerShape(10.dp)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 Icons.Default.Explore,
                                 contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(32.dp)
+                                tint = ElectricOrange,
+                                modifier = Modifier.size(24.dp)
                             )
                         }
 
-                        Spacer(modifier = Modifier.width(16.dp))
+                        Spacer(modifier = Modifier.width(14.dp))
 
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "LÀM GÌ BÂY GIỜ?",
-                                style = MaterialTheme.typography.titleLarge.copy(
-                                    fontWeight = FontWeight.Black,
-                                    letterSpacing = 0.5.sp
-                                ),
-                                color = Color.White
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "LÀM GÌ BÂY GIỜ?",
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = 0.5.sp
+                                    ),
+                                    color = TextPrimary
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                ShadcnBadge(text = "AI GỢI Ý", variant = ShadcnBadgeVariant.Orange)
+                            }
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Đang ở ${activeZone?.name ?: "Hà Giang"} • Chạm để gợi ý ngay",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color.White.copy(alpha = 0.9f)
+                                text = "Đang ở ${activeZone?.name ?: "Hà Giang"} • Chạm để tìm điểm tiếp theo",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextSecondary
                             )
                         }
 
                         Icon(
                             Icons.Default.ArrowForwardIos,
                             contentDescription = null,
-                            tint = Color.White.copy(alpha = 0.8f),
-                            modifier = Modifier.size(18.dp)
+                            tint = TextSubtle,
+                            modifier = Modifier.size(14.dp)
                         )
                     }
                 }
             }
 
-            // 1.5. Live Ride Cockpit Card
+            // 2. Live Ride Mode Toggle Banner
             item {
                 if (!liveRideState.isTracking) {
-                    Card(
+                    ShadcnCard(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { viewModel.startRide() },
-                        shape = RoundedCornerShape(18.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        border = androidx.compose.foundation.BorderStroke(1.5.dp, HighlandGreen.copy(alpha = 0.6f)),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                        shape = RoundedCornerShape(10.dp),
+                        backgroundColor = SurfaceWhite,
+                        borderColor = EmeraldGreenBorder
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(16.dp),
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(46.dp)
-                                    .clip(CircleShape)
-                                    .background(HighlandGreen.copy(alpha = 0.15f)),
+                                    .size(36.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(EmeraldGreenSoft),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     Icons.Default.TwoWheeler,
                                     contentDescription = null,
-                                    tint = HighlandGreen,
-                                    modifier = Modifier.size(26.dp)
+                                    tint = EmeraldGreenText,
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
 
-                            Spacer(modifier = Modifier.width(14.dp))
+                            Spacer(modifier = Modifier.width(12.dp))
 
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "BẬT CHẾ ĐỘ PHƯỢT (LIVE RIDE)",
-                                    style = MaterialTheme.typography.titleMedium.copy(
-                                        fontWeight = FontWeight.Bold,
-                                        letterSpacing = 0.5.sp
-                                    ),
-                                    color = HighlandGreen
+                                    text = "CHẾ ĐỘ PHƯỢT (LIVE RIDE)",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = EmeraldGreenText
                                 )
-                                Spacer(modifier = Modifier.height(2.dp))
                                 Text(
                                     text = "Đo độ cao mét, tốc độ GPS & tự động check-in",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = TextSecondary
                                 )
                             }
 
                             Icon(
                                 Icons.Default.PlayArrow,
                                 contentDescription = null,
-                                tint = HighlandGreen,
-                                modifier = Modifier.size(24.dp)
+                                tint = EmeraldGreenText,
+                                modifier = Modifier.size(20.dp)
                             )
                         }
                     }
                 } else {
-                    Card(
+                    ShadcnCard(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { viewModel.openCockpit() },
-                        shape = RoundedCornerShape(18.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
-                        border = androidx.compose.foundation.BorderStroke(
-                            1.5.dp,
-                            if (liveRideState.isPaused) AmberGlow else HighlandGreen
-                        ),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                        shape = RoundedCornerShape(10.dp),
+                        backgroundColor = SurfaceWhite,
+                        borderColor = if (liveRideState.isPaused) AmberWarningBorder else EmeraldGreenBorder
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(16.dp),
+                                .padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(12.dp)
+                                    .size(8.dp)
                                     .clip(CircleShape)
-                                    .background(if (liveRideState.isPaused) AmberGlow else HighlandGreen)
+                                    .background(if (liveRideState.isPaused) AmberWarning else EmeraldGreen)
                             )
 
-                            Spacer(modifier = Modifier.width(12.dp))
+                            Spacer(modifier = Modifier.width(10.dp))
 
                             Column(modifier = Modifier.weight(1f)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
                                         text = if (liveRideState.isPaused) "CHẶNG ĐANG TẠM DỪNG" else "ĐANG GHI HÀNH TRÌNH",
-                                        style = MaterialTheme.typography.labelSmall.copy(
-                                            fontWeight = FontWeight.Black,
-                                            letterSpacing = 0.8.sp
-                                        ),
-                                        color = if (liveRideState.isPaused) AmberGlow else HighlandGreen
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = if (liveRideState.isPaused) AmberWarningText else EmeraldGreenText
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "• ${String.format(java.util.Locale.US, "%.1f", liveRideState.totalDistanceKm)} km",
+                                        color = TextMuted,
+                                        style = MaterialTheme.typography.labelSmall
                                     )
                                 }
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "${liveRideState.currentSpeedKmh.toInt()} km/h • ${liveRideState.currentAltitude.toInt()}m cao độ • Đã đi ${String.format(java.util.Locale.US, "%.1f", liveRideState.totalDistanceKm)} km",
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = Color.White
-                                )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = "Chạm để phóng to màn hình Cockpit HUD ➔",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color.LightGray
+                                    text = "${liveRideState.currentSpeedKmh.toInt()} km/h • ${liveRideState.currentAltitude.toInt()}m cao độ",
+                                    style = TelemetryTextStyle.copy(fontSize = 13.sp),
+                                    color = TextPrimary
                                 )
                             }
+
+                            ShadcnBadge(
+                                text = "MỞ HUD",
+                                variant = ShadcnBadgeVariant.Emerald
+                            )
                         }
                     }
                 }
             }
 
-            // 2. Location & Zone Status Pill
+            // 3. Location & Zone Status Pill
             item {
-                Card(
+                ShadcnCard(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                    )
+                    shape = RoundedCornerShape(10.dp),
+                    backgroundColor = SurfaceWhite,
+                    borderColor = BorderSubtle
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
@@ -273,8 +274,8 @@ fun TodayScreen(
                             Icon(
                                 if (currentLocation != null) Icons.Default.GpsFixed else Icons.Default.GpsNotFixed,
                                 contentDescription = null,
-                                tint = if (isOutsideHaGiang) AmberGlow else if (currentLocation != null) HighlandGreen else SlateBlue,
-                                modifier = Modifier.size(20.dp)
+                                tint = if (isOutsideHaGiang) AmberWarningText else if (currentLocation != null) EmeraldGreenText else TextMuted,
+                                modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Column {
@@ -282,115 +283,74 @@ fun TodayScreen(
                                     text = if (isOutsideHaGiang) "GPS: Ngoài Hà Giang (~${distanceToHaGiangKm?.toInt() ?: 0} km)"
                                     else if (currentLocation != null) "Vị trí GPS: Hoạt động"
                                     else "Chưa có tín hiệu GPS",
-                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = if (isOutsideHaGiang) AmberGlow else if (currentLocation != null) HighlandGreen else SlateBlue
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = if (isOutsideHaGiang) AmberWarningText else if (currentLocation != null) EmeraldGreenText else TextSecondary
                                 )
                                 Text(
                                     text = if (isOutsideHaGiang) "Khu vực: ${activeZone?.name ?: "TP. Hà Giang"} (Xem trước)"
                                     else "Khu vực: ${activeZone?.name ?: "Chưa xác định"}",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = TextSecondary
                                 )
                             }
                         }
 
-                        TextButton(
+                        ShadcnButton(
                             onClick = { showZonePicker = true },
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            variant = ShadcnButtonVariant.Secondary,
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                         ) {
-                            Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(12.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Đổi vùng", fontSize = 12.sp)
+                            Text("Đổi vùng", fontSize = 11.sp)
                         }
                     }
                 }
             }
 
-            // 3. Mountain Sunset Warning Banner
+            // 4. Mountain Sunset Warning Banner (Pastel Amber/Rose Alert)
             item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = when {
-                            isNight -> AlertRed.copy(alpha = 0.15f)
-                            isNearDark -> AmberGlow.copy(alpha = 0.2f)
-                            else -> MaterialTheme.colorScheme.surface
-                        }
-                    ),
-                    border = when {
-                        isNight -> androidx.compose.foundation.BorderStroke(1.5.dp, AlertRed)
-                        isNearDark -> androidx.compose.foundation.BorderStroke(1.5.dp, AmberGlow)
-                        else -> null
-                    }
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            if (isNight || isNearDark) Icons.Default.Warning else Icons.Default.WbSunny,
-                            contentDescription = null,
-                            tint = if (isNight) AlertRed else if (isNearDark) AmberGlow else SunsetOrange,
-                            modifier = Modifier.size(28.dp)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = when {
-                                    isNight -> "ĐÃ TỐI TRÊN ĐÈO HÀ GIANG!"
-                                    isNearDark -> "CẢNH BÁO HOÀNG HÔN SẮP TẮT (${minutesUntilSunset} phút nữa)"
-                                    else -> "Thời gian an toàn đến hoàng hôn (17:15)"
-                                },
-                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                                color = if (isNight) AlertRed else if (isNearDark) AmberGlow else MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = when {
-                                    isNight -> "Nên về homestay ngay. Đèo núi đêm tối om, cua gấp và nhiều sương mù rất nguy hiểm!"
-                                    isNearDark -> "Nên giảm tốc độ và chốt điểm nghỉ/ăn tối trước 17:15 để tránh chạy đèo đêm."
-                                    else -> "Còn khoảng ${minutesUntilSunset / 60}h ${minutesUntilSunset % 60}p ánh sáng ban ngày. Hãy căn giờ vượt đèo hợp lý."
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
+                val alertVariant = when {
+                    isNight -> ShadcnBadgeVariant.Rose
+                    isNearDark -> ShadcnBadgeVariant.Amber
+                    else -> ShadcnBadgeVariant.Default
                 }
+
+                ShadcnAlert(
+                    title = when {
+                        isNight -> "ĐÃ TỐI TRÊN ĐÈO HÀ GIANG!"
+                        isNearDark -> "CẢNH BÁO HOÀNG HÔN SẮP TẮT (${minutesUntilSunset} phút nữa)"
+                        else -> "Thời gian an toàn đến hoàng hôn (17:15)"
+                    },
+                    description = when {
+                        isNight -> "Nên về homestay ngay. Đèo núi đêm tối om, cua gấp và nhiều sương mù rất nguy hiểm!"
+                        isNearDark -> "Nên giảm tốc độ và chốt điểm nghỉ/ăn tối trước 17:15 để tránh chạy đèo đêm."
+                        else -> "Còn khoảng ${minutesUntilSunset / 60}h ${minutesUntilSunset % 60}p ánh sáng ban ngày. Hãy căn giờ vượt đèo hợp lý."
+                    },
+                    variant = alertVariant,
+                    icon = if (isNight || isNearDark) Icons.Default.Warning else Icons.Default.WbSunny
+                )
             }
 
-            // 4. Day Tabs (Day 1, Day 2, Day 3, ...)
+            // 5. Day Tabs (Shadcn segmented tabs)
             item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    (1..config.durationDays).forEach { day ->
-                        val isSelected = selectedDay == day
-                        FilterChip(
-                            selected = isSelected,
-                            onClick = { selectedDay = day },
-                            label = {
-                                Text(
-                                    text = "Ngày $day",
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                                )
-                            },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                selectedLabelColor = MaterialTheme.colorScheme.onPrimary
-                            ),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                    }
+                val daysList = (1..config.durationDays).toList()
+                ShadcnSegmentedTabs(
+                    items = daysList,
+                    selectedItem = selectedDay,
+                    onItemSelected = { selectedDay = it },
+                    modifier = Modifier.fillMaxWidth()
+                ) { day, isSelected ->
+                    Text(
+                        text = "Ngày $day",
+                        color = if (isSelected) TextPrimary else TextMuted,
+                        fontSize = 12.sp,
+                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                    )
                 }
             }
 
-            // 5. Day Route Summary Hint
+            // 6. Day Route Summary Hint
             item {
                 val dayRouteHint = when (selectedDay) {
                     1 -> "📍 Chặng Ngày 1: TP. Hà Giang ➔ Dốc Bắc Sum ➔ Cổng Trời Quản Bạ ➔ Rừng Thông Yên Minh ➔ Phố Cáo ➔ Phố Cổ Đồng Văn (~140km)"
@@ -398,21 +358,22 @@ fun TodayScreen(
                     3 -> "📍 Chặng Ngày 3: Mèo Vạc ➔ Cua Chữ M ➔ Thác Du Già ➔ Đường Thượng ➔ Về lại TP. Hà Giang (~150km)"
                     else -> "📍 Chặng Ngày $selectedDay: Khám phá thêm các bản làng, chợ phiên và trở về an toàn."
                 }
-                Card(
+                ShadcnCard(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                    shape = RoundedCornerShape(8.dp),
+                    backgroundColor = SurfaceWhite,
+                    borderColor = BorderSubtle
                 ) {
                     Text(
                         text = dayRouteHint,
-                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(12.dp)
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                        modifier = Modifier.padding(10.dp)
                     )
                 }
             }
 
-            // 6. Timeline of Activities for Selected Day
+            // 7. Timeline of Activities for Selected Day
             val daySlots = itinerarySlots.filter { it.dayNumber == selectedDay }
 
             listOf(TimeSlot.MORNING, TimeSlot.NOON, TimeSlot.AFTERNOON, TimeSlot.EVENING).forEach { slot ->
@@ -430,8 +391,8 @@ fun TodayScreen(
                         Text(
                             text = "Chưa có điểm nào được ghim trong ${slot.label.lowercase()}",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.outline,
-                            modifier = Modifier.padding(start = 16.dp, bottom = 8.dp)
+                            color = TextMuted,
+                            modifier = Modifier.padding(start = 12.dp, bottom = 4.dp)
                         )
                     }
                 } else {
@@ -459,25 +420,30 @@ fun TodayScreen(
     if (showZonePicker) {
         AlertDialog(
             onDismissRequest = { showZonePicker = false },
-            title = { Text("Chọn cụm chặng hiện tại") },
+            containerColor = SurfaceWhite,
+            title = {
+                Text("Chọn cụm chặng hiện tại", color = TextPrimary, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+            },
             text = {
                 LazyColumn {
                     item {
                         ListItem(
-                            headlineContent = { Text("Tự động theo GPS") },
-                            leadingContent = { Icon(Icons.Default.AutoMode, contentDescription = null) },
+                            headlineContent = { Text("Tự động theo GPS", color = EmeraldGreenText, fontWeight = FontWeight.SemiBold) },
+                            leadingContent = { Icon(Icons.Default.AutoMode, contentDescription = null, tint = EmeraldGreen) },
+                            colors = ListItemDefaults.colors(containerColor = SurfaceWhite),
                             modifier = Modifier.clickable {
                                 viewModel.setManualZoneOverride(null)
                                 showZonePicker = false
                             }
                         )
-                        HorizontalDivider()
+                        HorizontalDivider(color = BorderSubtle)
                     }
                     items(zones) { zone ->
                         ListItem(
-                            headlineContent = { Text(zone.name) },
-                            supportingContent = { Text("Độ cao ~${zone.elevationMeters}m") },
-                            leadingContent = { Icon(Icons.Default.Place, contentDescription = null) },
+                            headlineContent = { Text(zone.name, color = TextPrimary) },
+                            supportingContent = { Text("Độ cao ~${zone.elevationMeters}m", color = TextSecondary) },
+                            leadingContent = { Icon(Icons.Default.Place, contentDescription = null, tint = ElectricOrange) },
+                            colors = ListItemDefaults.colors(containerColor = SurfaceWhite),
                             modifier = Modifier.clickable {
                                 viewModel.setManualZoneOverride(zone.id)
                                 showZonePicker = false
@@ -487,8 +453,11 @@ fun TodayScreen(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showZonePicker = false }) {
-                    Text("Đóng")
+                ShadcnButton(
+                    onClick = { showZonePicker = false },
+                    variant = ShadcnButtonVariant.Ghost
+                ) {
+                    Text("Đóng", color = TextSecondary)
                 }
             }
         )
@@ -504,17 +473,17 @@ fun TimeSlotHeader(slot: TimeSlot) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         val (icon, color) = when (slot) {
-            TimeSlot.MORNING -> Icons.Default.WbTwilight to SunsetOrange
-            TimeSlot.NOON -> Icons.Default.WbSunny to FuelGold
-            TimeSlot.AFTERNOON -> Icons.Default.CloudQueue to SlateBlue
-            TimeSlot.EVENING -> Icons.Default.NightsStay to MistBlue
+            TimeSlot.MORNING -> Icons.Default.WbTwilight to ElectricOrange
+            TimeSlot.NOON -> Icons.Default.WbSunny to AmberWarningText
+            TimeSlot.AFTERNOON -> Icons.Default.CloudQueue to SkyTelemetry
+            TimeSlot.EVENING -> Icons.Default.NightsStay to TextMuted
         }
-        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(20.dp))
-        Spacer(modifier = Modifier.width(8.dp))
+        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(16.dp))
+        Spacer(modifier = Modifier.width(6.dp))
         Text(
             text = "${slot.label.uppercase()} (${slot.timeRange})",
-            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-            color = MaterialTheme.colorScheme.onSurface
+            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+            color = TextSecondary
         )
     }
 }
@@ -527,86 +496,85 @@ fun ItineraryPlaceCard(
     onToggleVisited: () -> Unit,
     onCall: () -> Unit
 ) {
-    Card(
+    ShadcnCard(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (place.isVisited) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-            else MaterialTheme.colorScheme.surface
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+            .padding(vertical = 3.dp),
+        shape = RoundedCornerShape(10.dp),
+        backgroundColor = if (place.isVisited) SurfaceMuted.copy(alpha = 0.5f) else SurfaceWhite,
+        borderColor = if (place.isVisited) BorderSubtle.copy(alpha = 0.6f) else BorderSubtle
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
+        Column(modifier = Modifier.padding(12.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(
                     onClick = onToggleVisited,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(26.dp)
                 ) {
                     Icon(
                         if (place.isVisited) Icons.Default.CheckCircle else Icons.Outlined.Circle,
                         contentDescription = "Trạng thái",
-                        tint = if (place.isVisited) HighlandGreen else MaterialTheme.colorScheme.outline
+                        tint = if (place.isVisited) EmeraldGreen else BorderMedium,
+                        modifier = Modifier.size(18.dp)
                     )
                 }
 
-                Spacer(modifier = Modifier.width(10.dp))
+                Spacer(modifier = Modifier.width(8.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = place.name,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontWeight = FontWeight.SemiBold,
                             textDecoration = if (place.isVisited) androidx.compose.ui.text.style.TextDecoration.LineThrough else null
-                        )
+                        ),
+                        color = if (place.isVisited) TextMuted else TextPrimary
                     )
                     Text(
                         text = "${place.category.label} • Khoảng ${place.suggestedDurationMin} phút",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.outline
+                        color = TextSecondary
                     )
                 }
 
                 if (place.phoneNumber.isNotBlank()) {
-                    IconButton(onClick = onCall, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Default.Phone, contentDescription = "Gọi", tint = HighlandGreen)
+                    IconButton(onClick = onCall, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Default.Phone, contentDescription = "Gọi", tint = EmeraldGreenText, modifier = Modifier.size(16.dp))
                     }
                 }
             }
 
             if (place.practicalTip.isNotBlank()) {
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "💡 ${place.practicalTip}",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = TextSecondary
                 )
             }
 
             if (customNote.isNotBlank()) {
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(3.dp))
                 Text(
                     text = "📝 Ghi chú: $customNote",
-                    style = MaterialTheme.typography.bodySmall.copy(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic),
-                    color = SunsetOrange
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ElectricOrangeHover
                 )
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            Button(
+            ShadcnButton(
                 onClick = onNavigate,
-                modifier = Modifier.fillMaxWidth().height(40.dp),
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = SunsetOrange)
+                variant = ShadcnButtonVariant.Primary,
+                modifier = Modifier.fillMaxWidth().height(36.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
             ) {
-                Icon(Icons.Default.Directions, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("Dẫn đường ngay", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                Icon(Icons.Default.Directions, contentDescription = null, modifier = Modifier.size(14.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Dẫn đường ngay", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
             }
         }
     }

@@ -29,7 +29,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import com.reed.hagianggo.domain.LocationMath
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import com.reed.hagianggo.ui.components.ShadcnBadge
+import com.reed.hagianggo.ui.components.ShadcnBadgeVariant
 import com.reed.hagianggo.ui.MainViewModel
 import com.reed.hagianggo.ui.components.LiveRideCockpitSheet
 import com.reed.hagianggo.ui.components.PlaceFormDialog
@@ -110,6 +113,15 @@ class MainActivity : ComponentActivity() {
                     snackbarHost = { SnackbarHost(snackbarHostState) },
                     topBar = {
                         TopAppBar(
+                            modifier = Modifier.drawBehind {
+                                val strokeWidth = 1.dp.toPx()
+                                drawLine(
+                                    color = BorderSubtle,
+                                    start = Offset(0f, size.height),
+                                    end = Offset(size.width, size.height),
+                                    strokeWidth = strokeWidth
+                                )
+                            },
                             title = {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
@@ -117,55 +129,69 @@ class MainActivity : ComponentActivity() {
                                 ) {
                                     Text(
                                         text = "HÀ GIANG GO",
-                                        style = MaterialTheme.typography.titleLarge.copy(
+                                        style = MaterialTheme.typography.titleMedium.copy(
                                             fontWeight = FontWeight.Black,
-                                            letterSpacing = 1.sp
+                                            letterSpacing = 0.5.sp
                                         ),
-                                        color = SunsetOrange
+                                        color = TextPrimary
                                     )
                                     Spacer(modifier = Modifier.width(10.dp))
-                                    // Status pill
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                                    ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(6.dp)
-                                                    .clip(CircleShape)
-                                                    .background(if (isOutsideHaGiang) AmberGlow else if (currentLocation != null) HighlandGreen else FuelGold)
-                                            )
-                                            Spacer(modifier = Modifier.width(5.dp))
-                                            Text(
-                                                text = if (isOutsideHaGiang) "${activeZone?.name ?: "TP. Hà Giang"} (Xem trước)"
-                                                else (activeZone?.name ?: "100% Offline"),
-                                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold)
-                                            )
-                                        }
-                                    }
+                                    // Status badge phong cách shadcn light
+                                    ShadcnBadge(
+                                        text = if (isOutsideHaGiang) "${activeZone?.name ?: "TP. Hà Giang"} • Preview"
+                                        else (activeZone?.name ?: "100% Offline"),
+                                        variant = if (isOutsideHaGiang) ShadcnBadgeVariant.Amber
+                                        else if (currentLocation != null) ShadcnBadgeVariant.Emerald
+                                        else ShadcnBadgeVariant.Default
+                                    )
                                 }
                             },
                             actions = {
-                                IconButton(onClick = { viewModel.openWhatNow() }) {
-                                    Icon(
-                                        Icons.Default.Explore,
-                                        contentDescription = "Làm gì bây giờ?",
-                                        tint = SunsetOrange
-                                    )
+                                Box(
+                                    modifier = Modifier
+                                        .padding(end = 12.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(SurfaceMuted)
+                                        .clickable { viewModel.openWhatNow() }
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Explore,
+                                            contentDescription = "Làm gì bây giờ?",
+                                            tint = ElectricOrange,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Text(
+                                            text = "Làm gì?",
+                                            color = TextPrimary,
+                                            style = MaterialTheme.typography.labelSmall
+                                        )
+                                    }
                                 }
                             },
                             colors = TopAppBarDefaults.topAppBarColors(
-                                containerColor = MaterialTheme.colorScheme.surface
+                                containerColor = SurfaceWhite
                             )
                         )
                     },
                     bottomBar = {
                         NavigationBar(
-                            containerColor = MaterialTheme.colorScheme.surface,
-                            tonalElevation = 8.dp
+                            modifier = Modifier.drawBehind {
+                                val strokeWidth = 1.dp.toPx()
+                                drawLine(
+                                    color = BorderSubtle,
+                                    start = Offset(0f, 0f),
+                                    end = Offset(size.width, 0f),
+                                    strokeWidth = strokeWidth
+                                )
+                            },
+                            containerColor = SurfaceWhite,
+                            tonalElevation = 0.dp
                         ) {
                             val tabs = listOf(
                                 Triple(0, "Chuyến đi", Icons.Default.Map),
@@ -175,20 +201,30 @@ class MainActivity : ComponentActivity() {
                             )
 
                             tabs.forEach { (index, title, icon) ->
+                                val isSelected = selectedTab == index
                                 NavigationBarItem(
-                                    selected = selectedTab == index,
+                                    selected = isSelected,
                                     onClick = { viewModel.selectTab(index) },
-                                    icon = { Icon(icon, contentDescription = title) },
+                                    icon = {
+                                        Icon(
+                                            icon,
+                                            contentDescription = title,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    },
                                     label = {
                                         Text(
                                             text = title,
-                                            fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal
+                                            fontSize = 11.sp,
+                                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
                                         )
                                     },
                                     colors = NavigationBarItemDefaults.colors(
-                                        selectedIconColor = SunsetOrange,
-                                        selectedTextColor = SunsetOrange,
-                                        indicatorColor = SunsetOrange.copy(alpha = 0.15f)
+                                        selectedIconColor = ElectricOrange,
+                                        selectedTextColor = ElectricOrange,
+                                        unselectedIconColor = TextMuted,
+                                        unselectedTextColor = TextMuted,
+                                        indicatorColor = Color.Transparent
                                     )
                                 )
                             }

@@ -6,7 +6,10 @@ import android.graphics.drawable.BitmapDrawable
 import android.view.MotionEvent
 import android.view.View
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,9 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.reed.hagianggo.domain.LocationMath
-import com.reed.hagianggo.model.Place
-import com.reed.hagianggo.model.PlaceCategory
-import com.reed.hagianggo.model.label
+import com.reed.hagianggo.model.*
 import com.reed.hagianggo.ui.theme.*
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
@@ -202,7 +203,7 @@ fun RealMapView(
             }
         )
 
-        // Các nút điều khiển nổi (Floating Control Buttons)
+        // Các nút điều khiển nổi (Floating Control Buttons - shadcn style)
         Column(
             modifier = Modifier
                 .align(Alignment.TopEnd)
@@ -210,53 +211,81 @@ fun RealMapView(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // Nút định vị vị trí hiện tại của tôi
-            SmallFloatingActionButton(
-                onClick = {
-                    if (currentLat != null && currentLng != null) {
-                        mapViewInstance?.controller?.animateTo(GeoPoint(currentLat, currentLng), 14.5, 800L)
-                    }
-                },
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = if (currentLat != null) HighlandGreen else Color.Gray,
-                shape = CircleShape
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(SurfaceWhite)
+                    .border(BorderStroke(1.dp, BorderSubtle), CircleShape)
+                    .clickable {
+                        if (currentLat != null && currentLng != null) {
+                            mapViewInstance?.controller?.animateTo(GeoPoint(currentLat, currentLng), 14.5, 800L)
+                        }
+                    },
+                contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.MyLocation, contentDescription = "Vị trí của tôi", modifier = Modifier.size(20.dp))
+                Icon(
+                    Icons.Default.MyLocation,
+                    contentDescription = "Vị trí của tôi",
+                    tint = if (currentLat != null) EmeraldGreenText else TextMuted,
+                    modifier = Modifier.size(18.dp)
+                )
             }
 
             // Nút bao trọn toàn bộ vòng lặp Hà Giang
-            SmallFloatingActionButton(
-                onClick = {
-                    mapViewInstance?.controller?.animateTo(GeoPoint(23.16, 105.20), 10.8, 800L)
-                },
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = SunsetOrange,
-                shape = CircleShape
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(SurfaceWhite)
+                    .border(BorderStroke(1.dp, BorderSubtle), CircleShape)
+                    .clickable {
+                        mapViewInstance?.controller?.animateTo(GeoPoint(23.16, 105.20), 10.8, 800L)
+                    },
+                contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.CropFree, contentDescription = "Toàn cảnh Hà Giang", modifier = Modifier.size(20.dp))
+                Icon(
+                    Icons.Default.CropFree,
+                    contentDescription = "Toàn cảnh Hà Giang",
+                    tint = ElectricOrange,
+                    modifier = Modifier.size(18.dp)
+                )
             }
 
             // Nút chuyển đổi kiểu bản đồ (Tiêu chuẩn ⟷ Địa hình Topo)
-            SmallFloatingActionButton(
-                onClick = { isTopoMode = !isTopoMode },
-                containerColor = if (isTopoMode) HighlandGreen else MaterialTheme.colorScheme.surface,
-                contentColor = if (isTopoMode) Color.White else MaterialTheme.colorScheme.onSurface,
-                shape = CircleShape
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(if (isTopoMode) EmeraldGreenSoft else SurfaceWhite)
+                    .border(BorderStroke(1.dp, if (isTopoMode) EmeraldGreenBorder else BorderSubtle), CircleShape)
+                    .clickable { isTopoMode = !isTopoMode },
+                contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.Layers, contentDescription = "Đổi kiểu bản đồ", modifier = Modifier.size(20.dp))
+                Icon(
+                    Icons.Default.Layers,
+                    contentDescription = "Đổi kiểu bản đồ",
+                    tint = if (isTopoMode) EmeraldGreenText else TextSecondary,
+                    modifier = Modifier.size(18.dp)
+                )
             }
 
             // Nút Phóng to toàn màn hình / Thu nhỏ
             if (onToggleFullscreen != null) {
-                SmallFloatingActionButton(
-                    onClick = onToggleFullscreen,
-                    containerColor = if (isMapFullscreen) SunsetOrange else MaterialTheme.colorScheme.surface,
-                    contentColor = if (isMapFullscreen) Color.White else MaterialTheme.colorScheme.onSurface,
-                    shape = CircleShape
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(if (isMapFullscreen) ElectricOrangeSoft else SurfaceWhite)
+                        .border(BorderStroke(1.dp, if (isMapFullscreen) ElectricOrangeBorder else BorderSubtle), CircleShape)
+                        .clickable(onClick = onToggleFullscreen),
+                    contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         if (isMapFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
                         contentDescription = if (isMapFullscreen) "Thu nhỏ" else "Toàn màn hình",
-                        modifier = Modifier.size(20.dp)
+                        tint = if (isMapFullscreen) ElectricOrangeHover else TextSecondary,
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }
@@ -270,11 +299,11 @@ fun RealMapView(
                 .padding(12.dp)
         ) {
             selectedPlace?.let { place ->
-                Card(
+                ShadcnCard(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    backgroundColor = SurfaceWhite,
+                    borderColor = BorderSubtle
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         Row(
@@ -285,20 +314,30 @@ fun RealMapView(
                                 Text(
                                     text = place.name,
                                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = TextPrimary,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
-                                Text(
-                                    text = place.category.label,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.outline
-                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    ShadcnBadge(
+                                        text = place.category.label,
+                                        variant = ShadcnBadgeVariant.Orange
+                                    )
+                                    if (place.altitudeMeters > 0) {
+                                        Text(
+                                            text = "• ${place.altitudeMeters}m",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = TextMuted
+                                        )
+                                    }
+                                }
                             }
                             IconButton(
                                 onClick = { selectedPlace = null },
                                 modifier = Modifier.size(28.dp)
                             ) {
-                                Icon(Icons.Default.Close, contentDescription = "Đóng", tint = Color.Gray, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Default.Close, contentDescription = "Đóng", tint = TextMuted, modifier = Modifier.size(18.dp))
                             }
                         }
 
@@ -307,7 +346,7 @@ fun RealMapView(
                             Text(
                                 text = "💡 ${place.practicalTip}",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = TextSecondary
                             )
                         }
 
@@ -317,29 +356,28 @@ fun RealMapView(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Button(
+                            ShadcnButton(
                                 onClick = {
                                     LocationMath.openNavigationIntent(context, place.lat, place.lng, place.name)
                                 },
-                                modifier = Modifier.weight(1f).height(40.dp),
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = SunsetOrange)
+                                variant = ShadcnButtonVariant.Primary,
+                                modifier = Modifier.weight(1f).height(38.dp)
                             ) {
-                                Icon(Icons.Default.Directions, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Dẫn đường", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                Icon(Icons.Default.Directions, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text("Dẫn đường", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                             }
 
                             if (place.phone.isNotBlank()) {
-                                OutlinedButton(
+                                ShadcnButton(
                                     onClick = {
                                         LocationMath.openDialerIntent(context, place.phone)
                                     },
-                                    modifier = Modifier.weight(1f).height(40.dp),
-                                    shape = RoundedCornerShape(10.dp)
+                                    variant = ShadcnButtonVariant.Secondary,
+                                    modifier = Modifier.weight(1f).height(38.dp)
                                 ) {
-                                    Icon(Icons.Default.Phone, contentDescription = null, tint = HighlandGreen, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Icon(Icons.Default.Phone, contentDescription = null, tint = EmeraldGreen, modifier = Modifier.size(15.dp))
+                                    Spacer(modifier = Modifier.width(5.dp))
                                     Text("Gọi điện", fontSize = 12.sp)
                                 }
                             }

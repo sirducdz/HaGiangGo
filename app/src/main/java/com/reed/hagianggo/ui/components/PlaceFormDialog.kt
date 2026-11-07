@@ -15,6 +15,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.reed.hagianggo.model.*
+import com.reed.hagianggo.ui.theme.*
 import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -40,12 +41,25 @@ fun PlaceFormDialog(
     var zoneExpanded by remember { mutableStateOf(false) }
     var categoryExpanded by remember { mutableStateOf(false) }
 
+    val textFieldColors = OutlinedTextFieldDefaults.colors(
+        focusedContainerColor = SurfaceWhite,
+        unfocusedContainerColor = SurfaceWhite,
+        focusedTextColor = TextPrimary,
+        unfocusedTextColor = TextPrimary,
+        focusedBorderColor = ElectricOrange,
+        unfocusedBorderColor = BorderMedium,
+        focusedLabelColor = ElectricOrange,
+        unfocusedLabelColor = TextSecondary
+    )
+
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = SurfaceWhite,
         title = {
             Text(
                 text = if (initialPlace == null) "Thêm địa điểm mới" else "Chỉnh sửa địa điểm",
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                color = TextPrimary
             )
         },
         text = {
@@ -61,6 +75,7 @@ fun PlaceFormDialog(
                     onValueChange = { name = it },
                     label = { Text("Tên địa điểm (*)") },
                     singleLine = true,
+                    colors = textFieldColors,
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -76,6 +91,7 @@ fun PlaceFormDialog(
                         readOnly = true,
                         label = { Text("Thuộc chặng Hà Giang") },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = zoneExpanded) },
+                        colors = textFieldColors,
                         modifier = Modifier.fillMaxWidth().menuAnchor()
                     )
                     ExposedDropdownMenu(
@@ -105,6 +121,7 @@ fun PlaceFormDialog(
                         readOnly = true,
                         label = { Text("Phân loại") },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryExpanded) },
+                        colors = textFieldColors,
                         modifier = Modifier.fillMaxWidth().menuAnchor()
                     )
                     ExposedDropdownMenu(
@@ -131,7 +148,6 @@ fun PlaceFormDialog(
                     OutlinedTextField(
                         value = latText,
                         onValueChange = { input ->
-                            // Hỗ trợ tự tách nếu dán cả "lat, lng" vào ô đầu tiên
                             if (input.contains(",")) {
                                 val parts = input.split(",")
                                 latText = parts.getOrNull(0)?.trim() ?: ""
@@ -141,12 +157,14 @@ fun PlaceFormDialog(
                             }
                         },
                         label = { Text("Vĩ độ (Lat)") },
+                        colors = textFieldColors,
                         modifier = Modifier.weight(1f)
                     )
                     OutlinedTextField(
                         value = lngText,
                         onValueChange = { lngText = it },
                         label = { Text("Kinh độ (Lng)") },
+                        colors = textFieldColors,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -157,6 +175,7 @@ fun PlaceFormDialog(
                     onValueChange = { phone = it },
                     label = { Text("Số điện thoại liên hệ (nếu có)") },
                     singleLine = true,
+                    colors = textFieldColors,
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -165,6 +184,7 @@ fun PlaceFormDialog(
                     onValueChange = { addressHint = it },
                     label = { Text("Ghi chú vị trí / mốc km") },
                     singleLine = true,
+                    colors = textFieldColors,
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -175,18 +195,23 @@ fun PlaceFormDialog(
                     label = { Text("Mẹo sống còn 1 dòng (Tip)") },
                     minLines = 2,
                     maxLines = 3,
+                    colors = textFieldColors,
                     modifier = Modifier.fillMaxWidth()
                 )
 
                 // Checkbox ô tô đi được
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = carFriendly, onCheckedChange = { carFriendly = it })
-                    Text(text = "Đường đi ô tô vào được", fontSize = 14.sp)
+                    Checkbox(
+                        checked = carFriendly,
+                        onCheckedChange = { carFriendly = it },
+                        colors = CheckboxDefaults.colors(checkedColor = ElectricOrange, uncheckedColor = BorderMedium)
+                    )
+                    Text(text = "Đường đi ô tô vào được", fontSize = 13.sp, color = TextPrimary)
                 }
             }
         },
         confirmButton = {
-            Button(
+            ShadcnButton(
                 onClick = {
                     val latVal = latText.toDoubleOrNull() ?: 23.2795
                     val lngVal = lngText.toDoubleOrNull() ?: 105.3629
@@ -207,20 +232,21 @@ fun PlaceFormDialog(
                             isVisited = initialPlace?.isVisited ?: false
                         )
                     )
-                }
+                },
+                variant = ShadcnButtonVariant.Primary
             ) {
                 Text("LƯU ĐỊA ĐIỂM")
             }
         },
         dismissButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (initialPlace != null && onDelete != null) {
                     IconButton(onClick = { onDelete(initialPlace.id) }) {
-                        Icon(Icons.Default.Delete, contentDescription = "Xóa", tint = Color.Red)
+                        Icon(Icons.Default.Delete, contentDescription = "Xóa", tint = RoseDestructive)
                     }
                 }
-                TextButton(onClick = onDismiss) {
-                    Text("HỦY")
+                ShadcnButton(onClick = onDismiss, variant = ShadcnButtonVariant.Ghost) {
+                    Text("HỦY", color = TextSecondary)
                 }
             }
         }

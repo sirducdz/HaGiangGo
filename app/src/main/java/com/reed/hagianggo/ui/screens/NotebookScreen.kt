@@ -7,7 +7,9 @@ import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -29,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.reed.hagianggo.model.*
 import com.reed.hagianggo.ui.MainViewModel
+import com.reed.hagianggo.ui.components.*
 import com.reed.hagianggo.ui.theme.*
 import java.io.File
 import java.io.FileOutputStream
@@ -57,43 +60,47 @@ fun NotebookScreen(
     var showImportJsonDialog by remember { mutableStateOf(false) }
 
     Scaffold(
-        modifier = modifier.fillMaxSize()
+        modifier = modifier.fillMaxSize(),
+        containerColor = AppBackground
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // Sub-Tab Switcher
-            PrimaryTabRow(
-                selectedTabIndex = selectedSubTab,
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = SunsetOrange
-            ) {
-                Tab(
-                    selected = selectedSubTab == 0,
-                    onClick = { selectedSubTab = 0 },
-                    text = { Text("Chi tiêu", fontWeight = FontWeight.Bold) },
-                    icon = { Icon(Icons.Default.AccountBalanceWallet, contentDescription = null, modifier = Modifier.size(18.dp)) }
-                )
-                Tab(
-                    selected = selectedSubTab == 1,
-                    onClick = { selectedSubTab = 1 },
-                    text = { Text("Checklist", fontWeight = FontWeight.Bold) },
-                    icon = { Icon(Icons.Default.Checklist, contentDescription = null, modifier = Modifier.size(18.dp)) }
-                )
-                Tab(
-                    selected = selectedSubTab == 2,
-                    onClick = { selectedSubTab = 2 },
-                    text = { Text("Nhật ký", fontWeight = FontWeight.Bold) },
-                    icon = { Icon(Icons.Default.Book, contentDescription = null, modifier = Modifier.size(18.dp)) }
-                )
-                Tab(
-                    selected = selectedSubTab == 3,
-                    onClick = { selectedSubTab = 3 },
-                    text = { Text("Sao lưu", fontWeight = FontWeight.Bold) },
-                    icon = { Icon(Icons.Default.Backup, contentDescription = null, modifier = Modifier.size(18.dp)) }
-                )
+            // Sub-Tab Switcher phong cách shadcn light segmented
+            Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                ShadcnSegmentedTabs(
+                    items = listOf(0, 1, 2, 3),
+                    selectedItem = selectedSubTab,
+                    onItemSelected = { selectedSubTab = it },
+                    modifier = Modifier.fillMaxWidth()
+                ) { tabIndex, isSelected ->
+                    val (label, icon) = when (tabIndex) {
+                        0 -> "Chi tiêu" to Icons.Default.AccountBalanceWallet
+                        1 -> "Checklist" to Icons.Default.Checklist
+                        2 -> "Nhật ký" to Icons.Default.Book
+                        else -> "Sao lưu" to Icons.Default.Backup
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            icon,
+                            contentDescription = null,
+                            tint = if (isSelected) ElectricOrange else TextMuted,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = label,
+                            color = if (isSelected) TextPrimary else TextMuted,
+                            fontSize = 11.sp,
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                        )
+                    }
+                }
             }
 
             when (selectedSubTab) {
@@ -175,39 +182,47 @@ fun NotebookScreen(
         var jsonText by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { showImportJsonDialog = false },
-            title = { Text("Nhập dữ liệu JSON") },
+            containerColor = SurfaceWhite,
+            title = { Text("Khôi phục dữ liệu từ JSON", color = TextPrimary, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)) },
             text = {
                 Column {
-                    Text(
-                        "Dán chuỗi JSON đã sao lưu để khôi phục danh sách địa điểm, nhật ký, chi tiêu và checklist.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.outline
-                    )
+                    Text("Dán chuỗi JSON đã sao lưu vào ô bên dưới:", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = jsonText,
                         onValueChange = { jsonText = it },
-                        modifier = Modifier.fillMaxWidth().height(160.dp),
-                        placeholder = { Text("{\n  \"trip_config\": ...\n}") }
+                        modifier = Modifier.fillMaxWidth().height(150.dp),
+                        placeholder = { Text("{\"places\": [...], \"expenses\": [...]}", color = TextSubtle, fontSize = 12.sp) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = SurfaceMuted,
+                            unfocusedContainerColor = SurfaceMuted,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary,
+                            focusedBorderColor = ElectricOrange,
+                            unfocusedBorderColor = BorderSubtle
+                        )
                     )
                 }
             },
             confirmButton = {
-                Button(
+                ShadcnButton(
                     onClick = {
                         if (jsonText.isNotBlank()) {
                             viewModel.importBackupJson(jsonText)
                             showImportJsonDialog = false
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = SunsetOrange)
+                    variant = ShadcnButtonVariant.Primary
                 ) {
-                    Text("Khôi phục")
+                    Text("Khôi phục ngay")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showImportJsonDialog = false }) {
-                    Text("Hủy")
+                ShadcnButton(
+                    onClick = { showImportJsonDialog = false },
+                    variant = ShadcnButtonVariant.Ghost
+                ) {
+                    Text("Hủy", color = TextSecondary)
                 }
             }
         )
@@ -228,12 +243,14 @@ fun ExpenseTabContent(
     val totalSpent = remember(expenses) { expenses.sumOf { it.amount } }
 
     Scaffold(
+        containerColor = AppBackground,
         floatingActionButton = {
             FloatingActionButton(
                 onClick = onAddExpenseClick,
-                containerColor = SunsetOrange,
+                containerColor = ElectricOrange,
                 contentColor = Color.White,
-                shape = CircleShape
+                shape = RoundedCornerShape(12.dp),
+                elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 2.dp)
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Thêm khoản chi")
             }
@@ -243,17 +260,18 @@ fun ExpenseTabContent(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(16.dp, 16.dp, 16.dp, 96.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 96.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // Budget Card
+            // Budget Summary Card
             item {
-                Card(
+                ShadcnCard(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    shape = RoundedCornerShape(12.dp),
+                    backgroundColor = SurfaceWhite,
+                    borderColor = BorderSubtle
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                    Column(modifier = Modifier.padding(14.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
@@ -261,24 +279,25 @@ fun ExpenseTabContent(
                             Column {
                                 Text(
                                     text = "TỔNG ĐÃ CHI",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = MaterialTheme.colorScheme.outline
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TextMuted
                                 )
                                 Text(
                                     text = "${currencyFormatter.format(totalSpent)} đ",
-                                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Black),
-                                    color = if (totalSpent > tripConfig.totalBudget && tripConfig.totalBudget > 0) AlertRed else HighlandGreen
+                                    style = TelemetryTextStyle.copy(fontSize = 22.sp),
+                                    color = if (totalSpent > tripConfig.totalBudget && tripConfig.totalBudget > 0) RoseDestructiveText else EmeraldGreenText
                                 )
                             }
                             Column(horizontalAlignment = Alignment.End) {
                                 Text(
                                     text = "NGÂN SÁCH",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = MaterialTheme.colorScheme.outline
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TextMuted
                                 )
                                 Text(
                                     text = "${currencyFormatter.format(tripConfig.totalBudget)} đ",
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                                    style = TelemetryTextStyle.copy(fontSize = 16.sp),
+                                    color = TextPrimary
                                 )
                             }
                         }
@@ -290,36 +309,38 @@ fun ExpenseTabContent(
                             progress = { progress },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(8.dp)
-                                .clip(RoundedCornerShape(4.dp)),
-                            color = if (progress >= 1f) AlertRed else SunsetOrange
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp)),
+                            color = if (progress >= 1f) RoseDestructive else ElectricOrange,
+                            trackColor = SurfaceMuted
                         )
                     }
                 }
             }
 
-            // Category breakdown pills
+            // Category breakdown cards
             item {
                 val groupTotals = remember(expenses) {
                     expenses.groupBy { it.category }.mapValues { (_, list) -> list.sumOf { it.amount } }
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     listOf(ExpenseCategory.FUEL, ExpenseCategory.FOOD, ExpenseCategory.STAY, ExpenseCategory.TICKET).forEach { cat ->
                         val amount = groupTotals[cat] ?: 0L
-                        Card(
+                        ShadcnCard(
                             modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                            shape = RoundedCornerShape(8.dp),
+                            backgroundColor = SurfaceWhite,
+                            borderColor = BorderSubtle
                         ) {
                             Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(cat.label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                                Text(cat.label, style = MaterialTheme.typography.labelSmall, color = TextMuted, maxLines = 1)
                                 Text(
                                     "${amount / 1000}k",
-                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
-                                    color = SunsetOrange
+                                    style = TelemetryTextStyle.copy(fontSize = 13.sp),
+                                    color = ElectricOrangeHover
                                 )
                             }
                         }
@@ -328,27 +349,40 @@ fun ExpenseTabContent(
             }
 
             item {
-                Text(
-                    text = "LỊCH SỬ CHI TIÊU (${expenses.size})",
-                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "LỊCH SỬ CHI TIÊU (${expenses.size})",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextMuted
+                    )
+                }
             }
 
             if (expenses.isEmpty()) {
                 item {
-                    Text(
-                        text = "Chưa có khoản chi nào.\nBấm nút + bên dưới để ghi nhận tiền xăng, ăn uống, homestay!",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.outline,
-                        modifier = Modifier.padding(vertical = 24.dp)
-                    )
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Chưa có khoản chi nào.\nBấm nút + để ghi nhận tiền xăng, ăn uống, homestay!",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextMuted,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
                 }
             } else {
                 items(expenses, key = { it.id }) { item ->
-                    Card(
+                    ShadcnCard(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                        shape = RoundedCornerShape(8.dp),
+                        backgroundColor = SurfaceWhite,
+                        borderColor = BorderSubtle
                     ) {
                         Row(
                             modifier = Modifier
@@ -357,20 +391,21 @@ fun ExpenseTabContent(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(item.title, style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold))
+                                Text(item.title, style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold), color = TextPrimary)
                                 Text(
                                     "${item.category.label} • Ngày ${item.dayNumber}",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.outline
+                                    color = TextSecondary
                                 )
                             }
                             Text(
                                 "${currencyFormatter.format(item.amount)} đ",
-                                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
-                                color = SunsetOrange
+                                style = TelemetryTextStyle.copy(fontSize = 14.sp),
+                                color = ElectricOrangeHover
                             )
-                            IconButton(onClick = { onDeleteExpense(item.id) }, modifier = Modifier.size(32.dp)) {
-                                Icon(Icons.Default.Close, contentDescription = "Xóa", tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            IconButton(onClick = { onDeleteExpense(item.id) }, modifier = Modifier.size(28.dp)) {
+                                Icon(Icons.Default.Close, contentDescription = "Xóa", tint = TextSubtle, modifier = Modifier.size(16.dp))
                             }
                         }
                     }
@@ -394,12 +429,14 @@ fun ChecklistTabContent(
     val grouped = remember(checklist) { checklist.groupBy { it.groupName } }
 
     Scaffold(
+        containerColor = AppBackground,
         floatingActionButton = {
             FloatingActionButton(
                 onClick = onAddClick,
-                containerColor = SunsetOrange,
+                containerColor = ElectricOrange,
                 contentColor = Color.White,
-                shape = CircleShape
+                shape = RoundedCornerShape(12.dp),
+                elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 2.dp)
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Thêm đồ cần mang")
             }
@@ -409,15 +446,16 @@ fun ChecklistTabContent(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(16.dp, 16.dp, 16.dp, 96.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 96.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // Header Progress
+            // Header Progress Card
             item {
-                Card(
+                ShadcnCard(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = HighlandGreen.copy(alpha = 0.1f))
+                    shape = RoundedCornerShape(10.dp),
+                    backgroundColor = SurfaceWhite,
+                    borderColor = EmeraldGreenBorder
                 ) {
                     Row(
                         modifier = Modifier
@@ -429,19 +467,22 @@ fun ChecklistTabContent(
                         Column {
                             Text(
                                 "CHUẨN BỊ HÀNH TRANG",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = HighlandGreen
+                                style = MaterialTheme.typography.labelSmall,
+                                color = EmeraldGreenText
                             )
+                            Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 "$checkedCount / ${checklist.size} món đồ đã chuẩn bị",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                color = TextPrimary
                             )
                         }
                         CircularProgressIndicator(
                             progress = { if (checklist.isNotEmpty()) checkedCount.toFloat() / checklist.size else 0f },
-                            modifier = Modifier.size(36.dp),
-                            color = HighlandGreen,
-                            strokeWidth = 4.dp
+                            modifier = Modifier.size(32.dp),
+                            color = EmeraldGreen,
+                            trackColor = SurfaceMuted,
+                            strokeWidth = 3.dp
                         )
                     }
                 }
@@ -451,43 +492,46 @@ fun ChecklistTabContent(
                 item(key = "group_$groupName") {
                     Text(
                         text = groupName.uppercase(),
-                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                        color = SunsetOrange,
-                        modifier = Modifier.padding(top = 8.dp)
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = ElectricOrangeHover,
+                        modifier = Modifier.padding(top = 6.dp)
                     )
                 }
 
                 items(itemsInGroup, key = { it.id }) { item ->
-                    Card(
+                    ShadcnCard(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (item.isChecked) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-                            else MaterialTheme.colorScheme.surface
-                        )
+                        shape = RoundedCornerShape(8.dp),
+                        backgroundColor = if (item.isChecked) SurfaceMuted.copy(alpha = 0.5f) else SurfaceWhite,
+                        borderColor = BorderSubtle
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { onToggle(item.id) }
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Checkbox(
                                 checked = item.isChecked,
                                 onCheckedChange = { onToggle(item.id) },
-                                colors = CheckboxDefaults.colors(checkedColor = HighlandGreen)
+                                colors = CheckboxDefaults.colors(
+                                    checkedColor = EmeraldGreen,
+                                    uncheckedColor = BorderMedium,
+                                    checkmarkColor = Color.White
+                                )
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = item.title,
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     textDecoration = if (item.isChecked) androidx.compose.ui.text.style.TextDecoration.LineThrough else null
                                 ),
+                                color = if (item.isChecked) TextMuted else TextPrimary,
                                 modifier = Modifier.weight(1f)
                             )
                             IconButton(onClick = { onDelete(item.id) }, modifier = Modifier.size(28.dp)) {
-                                Icon(Icons.Default.Close, contentDescription = "Xóa", tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.Close, contentDescription = "Xóa", tint = TextSubtle, modifier = Modifier.size(16.dp))
                             }
                         }
                     }
@@ -511,12 +555,14 @@ fun JournalTabContent(
     val dateFormatter = remember { SimpleDateFormat("HH:mm - dd/MM", Locale.getDefault()) }
 
     Scaffold(
+        containerColor = AppBackground,
         floatingActionButton = {
             FloatingActionButton(
                 onClick = onAddJournalClick,
-                containerColor = SunsetOrange,
+                containerColor = ElectricOrange,
                 contentColor = Color.White,
-                shape = CircleShape
+                shape = RoundedCornerShape(12.dp),
+                elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 2.dp)
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Thêm nhật ký")
             }
@@ -526,82 +572,88 @@ fun JournalTabContent(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(16.dp, 16.dp, 16.dp, 96.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 96.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             item {
                 Text(
                     text = "NHẬT KÝ CHUYẾN ĐI (${journal.size} mục)",
-                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextMuted
                 )
             }
 
             if (journal.isEmpty()) {
                 item {
-                    Text(
-                        text = "Chưa có ghi chép nhật ký nào.\nLưu lại cảm xúc, kinh nghiệm đổ đèo hoặc ảnh kỷ niệm tại mỗi chặng!",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.outline,
-                        modifier = Modifier.padding(vertical = 24.dp)
-                    )
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Chưa có ghi chép nhật ký nào.\nLưu lại cảm xúc, kinh nghiệm đổ đèo hoặc ảnh kỷ niệm tại mỗi chặng!",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextMuted,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
                 }
             } else {
                 items(journal, key = { it.id }) { entry ->
-                    Card(
+                    ShadcnCard(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                        shape = RoundedCornerShape(10.dp),
+                        backgroundColor = SurfaceWhite,
+                        borderColor = BorderSubtle
                     ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
+                        Column(modifier = Modifier.padding(12.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.PinDrop, contentDescription = null, tint = SunsetOrange, modifier = Modifier.size(16.dp))
+                                    Icon(Icons.Default.PinDrop, contentDescription = null, tint = ElectricOrange, modifier = Modifier.size(15.dp))
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
                                         text = "Ngày ${entry.dayNumber} • ${zonesById[entry.zoneId]?.name ?: "Hà Giang"}",
-                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                                        color = TextPrimary
                                     )
                                 }
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
                                         text = dateFormatter.format(Date(entry.createdAt)),
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.outline
+                                        color = TextMuted
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     IconButton(onClick = { onDeleteJournal(entry.id) }, modifier = Modifier.size(28.dp)) {
-                                        Icon(Icons.Default.DeleteOutline, contentDescription = "Xóa", tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(16.dp))
+                                        Icon(Icons.Default.DeleteOutline, contentDescription = "Xóa", tint = RoseDestructiveText, modifier = Modifier.size(16.dp))
                                     }
                                 }
                             }
 
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(text = entry.content, style = MaterialTheme.typography.bodyMedium)
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(text = entry.content, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
 
                             if (!entry.photoPath.isNullOrBlank()) {
                                 Spacer(modifier = Modifier.height(8.dp))
-                                Card(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(8.dp),
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                                Row(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(SurfaceMuted)
+                                        .border(BorderStroke(1.dp, BorderSubtle), RoundedCornerShape(6.dp))
+                                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Row(
-                                        modifier = Modifier.padding(8.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(Icons.Default.Photo, contentDescription = null, tint = SunsetOrange, modifier = Modifier.size(20.dp))
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text(
-                                            text = "Đã đính kèm ảnh: ${File(entry.photoPath).name}",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            maxLines = 1
-                                        )
-                                    }
+                                    Icon(Icons.Default.Photo, contentDescription = null, tint = ElectricOrange, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Ảnh: ${File(entry.photoPath).name}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = TextSecondary,
+                                        maxLines = 1
+                                    )
                                 }
                             }
                         }
@@ -622,51 +674,51 @@ fun BackupTabContent(
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp, 16.dp, 16.dp, 96.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        contentPadding = PaddingValues(16.dp, 12.dp, 16.dp, 96.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
-            Card(
+            ShadcnCard(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = SlateBlue.copy(alpha = 0.1f))
+                shape = RoundedCornerShape(10.dp),
+                backgroundColor = SurfaceWhite,
+                borderColor = SkyTelemetryBorder
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(14.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Shield, contentDescription = null, tint = SlateBlue)
+                        Icon(Icons.Default.Shield, contentDescription = null, tint = SkyTelemetry, modifier = Modifier.size(20.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("100% OFFLINE & AN TOÀN", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+                        Text("100% OFFLINE & AN TOÀN", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold), color = TextPrimary)
                     }
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
                         "Dữ liệu chuyến đi, địa điểm và nhật ký được lưu hoàn toàn trên điện thoại của bạn, không gửi đi bất kỳ máy chủ nào. Bạn có thể sao lưu ra chuỗi JSON để lưu trữ hoặc gửi sang máy khác.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = TextSecondary
                     )
                 }
             }
         }
 
         item {
-            Button(
+            ShadcnButton(
                 onClick = onExportJson,
-                modifier = Modifier.fillMaxWidth().height(48.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = SunsetOrange)
+                variant = ShadcnButtonVariant.Primary,
+                modifier = Modifier.fillMaxWidth().height(44.dp)
             ) {
-                Icon(Icons.Default.Share, contentDescription = null)
+                Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Sao lưu / Xuất file JSON chuyến đi", fontWeight = FontWeight.Bold)
+                Text("Sao lưu / Xuất file JSON chuyến đi", fontWeight = FontWeight.SemiBold)
             }
         }
 
         item {
-            OutlinedButton(
+            ShadcnButton(
                 onClick = onOpenImportDialog,
-                modifier = Modifier.fillMaxWidth().height(48.dp),
-                shape = RoundedCornerShape(12.dp)
+                variant = ShadcnButtonVariant.Secondary,
+                modifier = Modifier.fillMaxWidth().height(44.dp)
             ) {
-                Icon(Icons.Default.FileOpen, contentDescription = null)
+                Icon(Icons.Default.FileOpen, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Khôi phục dữ liệu từ JSON", fontWeight = FontWeight.SemiBold)
             }
@@ -690,62 +742,91 @@ fun AddExpenseDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Thêm khoản chi") },
+        containerColor = SurfaceWhite,
+        title = { Text("Thêm khoản chi tiêu", color = TextPrimary, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(
                     value = amountText,
                     onValueChange = { amountText = it.filter { ch -> ch.isDigit() } },
-                    label = { Text("Số tiền (VNĐ)") },
+                    label = { Text("Số tiền (VNĐ)", color = TextSecondary) },
                     singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = SurfaceWhite,
+                        unfocusedContainerColor = SurfaceWhite,
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary,
+                        focusedBorderColor = ElectricOrange,
+                        unfocusedBorderColor = BorderMedium
+                    ),
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
-                    label = { Text("Mục chi tiêu (VD: Đổ xăng 95, Bánh cuốn trứng)") },
+                    label = { Text("Mục chi tiêu (VD: Đổ xăng, Bánh cuốn)", color = TextSecondary) },
                     singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = SurfaceWhite,
+                        unfocusedContainerColor = SurfaceWhite,
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary,
+                        focusedBorderColor = ElectricOrange,
+                        unfocusedBorderColor = BorderMedium
+                    ),
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                Text("Danh mục:", style = MaterialTheme.typography.bodySmall)
+                Text("Danh mục:", style = MaterialTheme.typography.labelSmall, color = TextMuted)
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     listOf(ExpenseCategory.FUEL, ExpenseCategory.FOOD, ExpenseCategory.STAY, ExpenseCategory.TICKET).forEach { cat ->
-                        FilterChip(
-                            selected = selectedCategory == cat,
-                            onClick = { selectedCategory = cat },
-                            label = { Text(cat.label, fontSize = 11.sp) }
-                        )
+                        val isSelected = selectedCategory == cat
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (isSelected) ElectricOrangeSoft else SurfaceMuted)
+                                .border(BorderStroke(1.dp, if (isSelected) ElectricOrangeBorder else BorderSubtle), RoundedCornerShape(6.dp))
+                                .clickable { selectedCategory = cat }
+                                .padding(horizontal = 8.dp, vertical = 5.dp)
+                        ) {
+                            Text(cat.label, fontSize = 11.sp, color = if (isSelected) ElectricOrangeHover else TextSecondary, fontWeight = FontWeight.SemiBold)
+                        }
                     }
                 }
 
-                Text("Ngày thứ:", style = MaterialTheme.typography.bodySmall)
+                Text("Ngày thứ:", style = MaterialTheme.typography.labelSmall, color = TextMuted)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     (1..durationDays).forEach { day ->
-                        FilterChip(
-                            selected = selectedDay == day,
-                            onClick = { selectedDay = day },
-                            label = { Text("N$day") }
-                        )
+                        val isSelected = selectedDay == day
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (isSelected) ElectricOrangeSoft else SurfaceMuted)
+                                .border(BorderStroke(1.dp, if (isSelected) ElectricOrangeBorder else BorderSubtle), RoundedCornerShape(6.dp))
+                                .clickable { selectedDay = day }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text("N$day", fontSize = 11.sp, color = if (isSelected) ElectricOrangeHover else TextSecondary, fontWeight = FontWeight.SemiBold)
+                        }
                     }
                 }
             }
         },
         confirmButton = {
-            Button(
+            ShadcnButton(
                 onClick = {
                     val amount = amountText.toLongOrNull() ?: 0L
                     if (amount > 0 && title.isNotBlank()) {
                         onConfirm(amount, selectedCategory, title.trim(), selectedDay)
                     }
                 },
-                colors = ButtonDefaults.buttonColors(containerColor = SunsetOrange)
+                variant = ShadcnButtonVariant.Primary
             ) {
-                Text("Lưu")
+                Text("Lưu khoản chi")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Hủy") }
+            ShadcnButton(onClick = onDismiss, variant = ShadcnButtonVariant.Ghost) { Text("Hủy", color = TextSecondary) }
         }
     )
 }
@@ -762,17 +843,26 @@ fun AddChecklistDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Thêm đồ cần mang") },
+        containerColor = SurfaceWhite,
+        title = { Text("Thêm đồ cần mang", color = TextPrimary, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
-                    label = { Text("Tên món đồ (VD: Bộ vá xe không săm)") },
+                    label = { Text("Tên món đồ (VD: Bộ vá xe không săm)", color = TextSecondary) },
                     singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = SurfaceWhite,
+                        unfocusedContainerColor = SurfaceWhite,
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary,
+                        focusedBorderColor = ElectricOrange,
+                        unfocusedBorderColor = BorderMedium
+                    ),
                     modifier = Modifier.fillMaxWidth()
                 )
-                Text("Nhóm:", style = MaterialTheme.typography.bodySmall)
+                Text("Nhóm phân loại:", style = MaterialTheme.typography.labelSmall, color = TextMuted)
                 Column {
                     defaultGroups.forEach { grp ->
                         Row(
@@ -780,30 +870,34 @@ fun AddChecklistDialog(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { group = grp }
-                                .padding(vertical = 4.dp)
+                                .padding(vertical = 3.dp)
                         ) {
-                            RadioButton(selected = group == grp, onClick = { group = grp })
+                            RadioButton(
+                                selected = group == grp,
+                                onClick = { group = grp },
+                                colors = RadioButtonDefaults.colors(selectedColor = ElectricOrange, unselectedColor = BorderMedium)
+                            )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text(grp, style = MaterialTheme.typography.bodySmall)
+                            Text(grp, style = MaterialTheme.typography.bodySmall, color = TextPrimary)
                         }
                     }
                 }
             }
         },
         confirmButton = {
-            Button(
+            ShadcnButton(
                 onClick = {
                     if (title.isNotBlank()) {
                         onConfirm(group, title.trim())
                     }
                 },
-                colors = ButtonDefaults.buttonColors(containerColor = SunsetOrange)
+                variant = ShadcnButtonVariant.Primary
             ) {
-                Text("Thêm")
+                Text("Thêm món đồ")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Hủy") }
+            ShadcnButton(onClick = onDismiss, variant = ShadcnButtonVariant.Ghost) { Text("Hủy", color = TextSecondary) }
         }
     )
 }
@@ -843,52 +937,67 @@ fun AddJournalDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Viết nhật ký chuyến đi") },
+        containerColor = SurfaceWhite,
+        title = { Text("Viết nhật ký chuyến đi", color = TextPrimary, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(
                     value = content,
                     onValueChange = { content = it },
-                    label = { Text("Ghi chú, cảm xúc, trải nghiệm...") },
+                    label = { Text("Ghi chú, cảm xúc, trải nghiệm...", color = TextSecondary) },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = SurfaceWhite,
+                        unfocusedContainerColor = SurfaceWhite,
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary,
+                        focusedBorderColor = ElectricOrange,
+                        unfocusedBorderColor = BorderMedium
+                    ),
                     modifier = Modifier.fillMaxWidth().height(120.dp)
                 )
 
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Ngày:", style = MaterialTheme.typography.bodySmall)
+                    Text("Ngày:", style = MaterialTheme.typography.labelSmall, color = TextMuted)
                     (1..durationDays).forEach { day ->
-                        FilterChip(
-                            selected = selectedDay == day,
-                            onClick = { selectedDay = day },
-                            label = { Text("N$day") }
-                        )
+                        val isSelected = selectedDay == day
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (isSelected) ElectricOrangeSoft else SurfaceMuted)
+                                .border(BorderStroke(1.dp, if (isSelected) ElectricOrangeBorder else BorderSubtle), RoundedCornerShape(6.dp))
+                                .clickable { selectedDay = day }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text("N$day", fontSize = 11.sp, color = if (isSelected) ElectricOrangeHover else TextSecondary, fontWeight = FontWeight.SemiBold)
+                        }
                     }
                 }
 
-                Button(
+                ShadcnButton(
                     onClick = { photoPickerLauncher.launch("image/*") },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
+                    variant = ShadcnButtonVariant.Secondary,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Icon(Icons.Default.AddPhotoAlternate, contentDescription = null)
+                    Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text(if (savedPhotoPath != null) "Đã chọn 1 ảnh (Đổi ảnh)" else "Đính kèm ảnh")
+                    Text(if (savedPhotoPath != null) "Đã chọn 1 ảnh (Đổi ảnh)" else "Đính kèm ảnh", fontSize = 12.sp)
                 }
             }
         },
         confirmButton = {
-            Button(
+            ShadcnButton(
                 onClick = {
                     if (content.isNotBlank()) {
                         onConfirm(null, selectedDay, selectedZoneId, content.trim(), savedPhotoPath)
                     }
                 },
-                colors = ButtonDefaults.buttonColors(containerColor = SunsetOrange)
+                variant = ShadcnButtonVariant.Primary
             ) {
                 Text("Lưu nhật ký")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Hủy") }
+            ShadcnButton(onClick = onDismiss, variant = ShadcnButtonVariant.Ghost) { Text("Hủy", color = TextSecondary) }
         }
     )
 }

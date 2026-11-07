@@ -1,7 +1,9 @@
 package com.reed.hagianggo.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -27,8 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.reed.hagianggo.model.Place
 import com.reed.hagianggo.model.Zone
-import com.reed.hagianggo.ui.theme.HighlandGreen
-import com.reed.hagianggo.ui.theme.SunsetOrange
+import com.reed.hagianggo.ui.theme.*
 
 @Composable
 fun HaGiangLoopMap(
@@ -44,14 +45,13 @@ fun HaGiangLoopMap(
     val textMeasurer = rememberTextMeasurer()
     val sortedZones = zones.sortedBy { it.seq }
 
-    Card(
+    ShadcnCard(
         modifier = modifier
             .fillMaxWidth()
             .height(260.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-        ),
-        shape = RoundedCornerShape(16.dp)
+        backgroundColor = SurfaceWhite,
+        borderColor = BorderSubtle,
+        shape = RoundedCornerShape(12.dp)
     ) {
         Box(modifier = Modifier.fillMaxSize().padding(12.dp)) {
             Canvas(
@@ -87,8 +87,8 @@ fun HaGiangLoopMap(
 
                 drawPath(
                     path = path,
-                    color = Color.Gray.copy(alpha = 0.45f),
-                    style = Stroke(width = 6.dp.toPx(), miter = 4f)
+                    color = BorderMedium,
+                    style = Stroke(width = 5.dp.toPx(), miter = 4f)
                 )
 
                 // 2. Vẽ vệt hành trình GPS thực tế (nếu có)
@@ -160,7 +160,7 @@ fun HaGiangLoopMap(
                         style = TextStyle(
                             fontSize = 11.sp,
                             fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
-                            color = if (isActive) SunsetOrange else Color.DarkGray
+                            color = if (isActive) ElectricOrangeHover else TextPrimary
                         )
                     )
 
@@ -175,9 +175,10 @@ fun HaGiangLoopMap(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .background(
-                        MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-                        RoundedCornerShape(8.dp)
+                        SurfaceWhite.copy(alpha = 0.95f),
+                        RoundedCornerShape(6.dp)
                     )
+                    .border(BorderStroke(1.dp, BorderSubtle), RoundedCornerShape(6.dp))
                     .padding(horizontal = 8.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -185,12 +186,13 @@ fun HaGiangLoopMap(
                 Icon(
                     imageVector = Icons.Default.Navigation,
                     contentDescription = null,
-                    tint = SunsetOrange,
-                    modifier = Modifier.size(14.dp)
+                    tint = ElectricOrange,
+                    modifier = Modifier.size(12.dp)
                 )
                 Text(
-                    text = "Vòng lặp 8 chặng (Chạm để xem)",
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    text = "Vòng lặp 8 chặng",
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp, fontWeight = FontWeight.SemiBold),
+                    color = TextPrimary
                 )
             }
         }
