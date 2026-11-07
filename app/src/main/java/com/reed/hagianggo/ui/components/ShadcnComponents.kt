@@ -1,14 +1,16 @@
 package com.reed.hagianggo.ui.components
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -17,9 +19,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -27,20 +33,21 @@ import androidx.compose.ui.unit.sp
 import com.reed.hagianggo.ui.theme.*
 
 // =========================================================================
-// 1. ShadcnCard: Thẻ trắng tinh tế với viền mảnh 1px, tươi sáng & thanh lịch
+// 1. ShadcnCard: Thẻ trắng sang trọng kiểu Airbnb / AllTrails với chiều sâu nhẹ & lò xo
 // =========================================================================
 @Composable
 fun ShadcnCard(
     modifier: Modifier = Modifier,
-    shape: Shape = RoundedCornerShape(12.dp),
+    shape: Shape = RoundedCornerShape(16.dp),
     backgroundColor: Color = SurfaceWhite,
     borderColor: Color = BorderSubtle,
     borderWidth: Dp = 1.dp,
+    shadowElevation: Dp = 2.dp,
     onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
     val cardModifier = if (onClick != null) {
-        modifier.clickable(onClick = onClick)
+        modifier.springClickable(onClick = onClick)
     } else {
         modifier
     }
@@ -51,7 +58,7 @@ fun ShadcnCard(
         color = backgroundColor,
         border = BorderStroke(borderWidth, borderColor),
         tonalElevation = 0.dp,
-        shadowElevation = 0.dp
+        shadowElevation = if (backgroundColor == SurfaceWhite) shadowElevation else 0.dp
     ) {
         Column(content = content)
     }
@@ -61,14 +68,14 @@ fun ShadcnCard(
 // 2. ShadcnBadge: Huy hiệu/tag nhỏ gọn với tông màu pastel tươi tắn
 // =========================================================================
 enum class ShadcnBadgeVariant {
-    Default,     // Xám nhạt Slate
-    Secondary,   // Nền trắng viền xám
-    Outline,     // Nền trong suốt
-    Orange,      // Cam phượt hoàng hôn pastel
-    Emerald,     // Xanh ngọc an toàn pastel
-    Amber,       // Vàng hổ phách cảnh báo pastel
-    Rose,        // Đỏ / SOS pastel
-    Sky          // Xanh dương viễn trắc pastel
+    Default,
+    Secondary,
+    Outline,
+    Orange,
+    Emerald,
+    Amber,
+    Rose,
+    Sky
 }
 
 @Composable
@@ -77,49 +84,17 @@ fun ShadcnBadge(
     modifier: Modifier = Modifier,
     variant: ShadcnBadgeVariant = ShadcnBadgeVariant.Default,
     icon: ImageVector? = null,
-    shape: Shape = RoundedCornerShape(6.dp)
+    shape: Shape = RoundedCornerShape(8.dp)
 ) {
     val (bgColor, borderColor, textColor) = when (variant) {
-        ShadcnBadgeVariant.Default -> Triple(
-            SurfaceMuted,
-            BorderSubtle,
-            TextSecondary
-        )
-        ShadcnBadgeVariant.Secondary -> Triple(
-            SurfaceWhite,
-            BorderMedium,
-            TextPrimary
-        )
-        ShadcnBadgeVariant.Outline -> Triple(
-            Color.Transparent,
-            BorderMedium,
-            TextSecondary
-        )
-        ShadcnBadgeVariant.Orange -> Triple(
-            ElectricOrangeSoft,
-            ElectricOrangeBorder,
-            ElectricOrangeHover
-        )
-        ShadcnBadgeVariant.Emerald -> Triple(
-            EmeraldGreenSoft,
-            EmeraldGreenBorder,
-            EmeraldGreenText
-        )
-        ShadcnBadgeVariant.Amber -> Triple(
-            AmberWarningSoft,
-            AmberWarningBorder,
-            AmberWarningText
-        )
-        ShadcnBadgeVariant.Rose -> Triple(
-            RoseDestructiveSoft,
-            RoseDestructiveBorder,
-            RoseDestructiveText
-        )
-        ShadcnBadgeVariant.Sky -> Triple(
-            SkyTelemetrySoft,
-            SkyTelemetryBorder,
-            SkyTelemetry
-        )
+        ShadcnBadgeVariant.Default -> Triple(SurfaceMuted, BorderSubtle, TextSecondary)
+        ShadcnBadgeVariant.Secondary -> Triple(SurfaceWhite, BorderMedium, TextPrimary)
+        ShadcnBadgeVariant.Outline -> Triple(Color.Transparent, BorderMedium, TextSecondary)
+        ShadcnBadgeVariant.Orange -> Triple(ElectricOrangeSoft, ElectricOrangeBorder, ElectricOrangeHover)
+        ShadcnBadgeVariant.Emerald -> Triple(EmeraldGreenSoft, EmeraldGreenBorder, EmeraldGreenText)
+        ShadcnBadgeVariant.Amber -> Triple(AmberWarningSoft, AmberWarningBorder, AmberWarningText)
+        ShadcnBadgeVariant.Rose -> Triple(RoseDestructiveSoft, RoseDestructiveBorder, RoseDestructiveText)
+        ShadcnBadgeVariant.Sky -> Triple(SkyTelemetrySoft, SkyTelemetryBorder, SkyTelemetry)
     }
 
     Box(
@@ -127,7 +102,7 @@ fun ShadcnBadge(
             .clip(shape)
             .background(bgColor)
             .border(BorderStroke(1.dp, borderColor), shape)
-            .padding(horizontal = 7.dp, vertical = 3.dp),
+            .padding(horizontal = 8.dp, vertical = 3.5.dp),
         contentAlignment = Alignment.Center
     ) {
         Row(
@@ -149,7 +124,7 @@ fun ShadcnBadge(
                 color = textColor,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,
-                letterSpacing = 0.3.sp,
+                letterSpacing = 0.2.sp,
                 maxLines = 1
             )
         }
@@ -157,14 +132,14 @@ fun ShadcnBadge(
 }
 
 // =========================================================================
-// 3. ShadcnButton: Nút bấm phẳng bo góc 8dp
+// 3. ShadcnButton: Nút bấm bo tròn đàn hồi lò xo kèm phản hồi xúc giác Haptic
 // =========================================================================
 enum class ShadcnButtonVariant {
-    Primary,     // Solid Cam ElectricOrange
-    Secondary,   // Nền trắng, viền mảnh
-    Outline,     // Trong suốt, viền xám
-    Ghost,       // Phẳng, không viền
-    Destructive  // Đỏ cảnh báo
+    Primary,
+    Secondary,
+    Outline,
+    Ghost,
+    Destructive
 }
 
 @Composable
@@ -176,39 +151,39 @@ fun ShadcnButton(
     contentPadding: PaddingValues = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
     content: @Composable RowScope.() -> Unit
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val haptic = LocalHapticFeedback.current
+
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed && enabled) 0.96f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = 680f
+        ),
+        label = "ShadcnBtnScale"
+    )
+
     val (containerColor, contentColor, border) = when (variant) {
-        ShadcnButtonVariant.Primary -> Triple(
-            ElectricOrange,
-            Color.White,
-            null
-        )
-        ShadcnButtonVariant.Secondary -> Triple(
-            SurfaceWhite,
-            TextPrimary,
-            BorderStroke(1.dp, BorderSubtle)
-        )
-        ShadcnButtonVariant.Outline -> Triple(
-            Color.Transparent,
-            TextPrimary,
-            BorderStroke(1.dp, BorderMedium)
-        )
-        ShadcnButtonVariant.Ghost -> Triple(
-            Color.Transparent,
-            TextSecondary,
-            null
-        )
-        ShadcnButtonVariant.Destructive -> Triple(
-            RoseDestructive,
-            Color.White,
-            null
-        )
+        ShadcnButtonVariant.Primary -> Triple(ElectricOrange, Color.White, null)
+        ShadcnButtonVariant.Secondary -> Triple(SurfaceWhite, TextPrimary, BorderStroke(1.dp, BorderSubtle))
+        ShadcnButtonVariant.Outline -> Triple(Color.Transparent, TextPrimary, BorderStroke(1.dp, BorderMedium))
+        ShadcnButtonVariant.Ghost -> Triple(Color.Transparent, TextSecondary, null)
+        ShadcnButtonVariant.Destructive -> Triple(RoseDestructive, Color.White, null)
     }
 
     Button(
-        onClick = onClick,
-        modifier = modifier,
+        onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            onClick()
+        },
+        interactionSource = interactionSource,
+        modifier = modifier.graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+        },
         enabled = enabled,
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(12.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = containerColor,
             contentColor = contentColor,
@@ -217,10 +192,8 @@ fun ShadcnButton(
         ),
         border = border,
         elevation = ButtonDefaults.buttonElevation(
-            defaultElevation = 0.dp,
-            pressedElevation = 0.dp,
-            focusedElevation = 0.dp,
-            hoveredElevation = 0.dp
+            defaultElevation = if (variant == ShadcnButtonVariant.Primary) 2.dp else 0.dp,
+            pressedElevation = 0.dp
         ),
         contentPadding = contentPadding,
         content = content
@@ -228,7 +201,7 @@ fun ShadcnButton(
 }
 
 // =========================================================================
-// 4. ShadcnSegmentedTabs: Bộ chuyển Tab dạng viên thuốc sáng màu tinh tế
+// 4. ShadcnSegmentedTabs: Khay trượt có viên nang trắng lướt vật lý lò xo thực thụ
 // =========================================================================
 @Composable
 fun <T> ShadcnSegmentedTabs(
@@ -238,40 +211,59 @@ fun <T> ShadcnSegmentedTabs(
     modifier: Modifier = Modifier,
     itemLabel: @Composable (T, Boolean) -> Unit
 ) {
-    Box(
+    val haptic = LocalHapticFeedback.current
+    val selectedIndex = items.indexOf(selectedItem).coerceAtLeast(0)
+
+    BoxWithConstraints(
         modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
+            .height(40.dp)
+            .clip(RoundedCornerShape(12.dp))
             .background(SurfaceMuted)
-            .border(BorderStroke(1.dp, BorderSubtle), RoundedCornerShape(8.dp))
-            .padding(2.dp)
+            .border(BorderStroke(1.dp, BorderSubtle), RoundedCornerShape(12.dp))
+            .padding(3.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
+        val tabCount = items.size.coerceAtLeast(1)
+        val tabWidth = maxWidth / tabCount
+        val indicatorOffset by animateDpAsState(
+            targetValue = tabWidth * selectedIndex,
+            animationSpec = spring(
+                dampingRatio = 0.82f,
+                stiffness = 460f
+            ),
+            label = "SegmentedSlideOffset"
+        )
+
+        // Viên nang trắng có bóng đổ nhẹ trượt mượt giữa các tab
+        Box(
+            modifier = Modifier
+                .offset(x = indicatorOffset)
+                .width(tabWidth)
+                .fillMaxHeight()
+                .shadow(2.dp, RoundedCornerShape(9.dp), ambientColor = SoftShadowColor, spotColor = SoftShadowColor)
+                .clip(RoundedCornerShape(9.dp))
+                .background(SurfaceWhite)
+                .border(BorderStroke(1.dp, BorderSubtle), RoundedCornerShape(9.dp))
+        )
+
+        Row(modifier = Modifier.fillMaxSize()) {
             items.forEach { item ->
                 val isSelected = item == selectedItem
-                val tabBg by animateColorAsState(
-                    targetValue = if (isSelected) SurfaceWhite else Color.Transparent,
-                    animationSpec = tween(durationMillis = 150),
-                    label = "TabBgAnimation"
-                )
-
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(tabBg)
-                        .then(
-                            if (isSelected) Modifier.border(BorderStroke(1.dp, BorderSubtle), RoundedCornerShape(6.dp))
-                            else Modifier
-                        )
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(9.dp))
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
-                            onClick = { onItemSelected(item) }
+                            onClick = {
+                                if (!isSelected) {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onItemSelected(item)
+                                }
+                            }
                         )
-                        .padding(vertical = 7.dp, horizontal = 4.dp),
+                        .padding(horizontal = 4.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     itemLabel(item, isSelected)
@@ -303,14 +295,16 @@ fun ShadcnAlert(
 
     ShadcnCard(
         modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
         backgroundColor = bgColor,
-        borderColor = accentColor.copy(alpha = 0.35f),
-        borderWidth = 1.dp
+        borderColor = accentColor.copy(alpha = 0.30f),
+        borderWidth = 1.dp,
+        shadowElevation = 0.dp
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(13.dp),
             verticalAlignment = Alignment.Top
         ) {
             if (icon != null) {

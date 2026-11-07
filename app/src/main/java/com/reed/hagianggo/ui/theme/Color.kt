@@ -7,11 +7,13 @@ import androidx.compose.ui.graphics.Color
 // Tươi sáng, thanh lịch, sắc nét và dịu mắt
 // ==========================================
 
-// Bề mặt & Nền
-val AppBackground = Color(0xFFF8FAFC)     // Slate-50: Nền sáng nhẹ nhàng, không bị chói lóa
-val SurfaceWhite = Color(0xFFFFFFFF)      // Pure White: Bề mặt Card, Header, BottomBar
+// Bề mặt & Nền (AllTrails × Airbnb Clean Light)
+val AppBackground = Color(0xFFF6F8FA)     // Nền sáng kem lạnh dịu mắt, làm nổi bật thẻ trắng Pure White
+val SurfaceWhite = Color(0xFFFFFFFF)      // Pure White: Bề mặt Card, Sheet, Floating Pill
+val SurfaceGlass = Color(0xEBFFFFFF)      // Kính mờ sáng 92% cho Thanh điều hướng & Header nổi
 val SurfaceMuted = Color(0xFFF1F5F9)      // Slate-100: Khay trượt Tab, Ô tìm kiếm, Box phụ
 val SurfaceHover = Color(0xFFE2E8F0)      // Slate-200: Trạng thái nhấn, hover
+val SoftShadowColor = Color(0x180F172A)   // Bóng đổ mềm tự nhiên kiểu Airbnb
 
 // Đường viền 1px sắc nét (Hairline Borders)
 val BorderSubtle = Color(0xFFE2E8F0)      // Slate-200: Viền Card, Divider, BottomBar

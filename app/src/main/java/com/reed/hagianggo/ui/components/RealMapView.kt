@@ -6,6 +6,10 @@ import android.graphics.drawable.BitmapDrawable
 import android.view.MotionEvent
 import android.view.View
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -20,10 +24,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -40,6 +47,7 @@ import org.osmdroid.views.overlay.Polyline
 import java.io.File
 import java.util.Locale
 import kotlin.math.ln
+import kotlin.math.pow
 
 // MapView ngăn không cho Container cha (LazyColumn) cuộn cướp thao tác khi người dùng đang lướt bản đồ
 class TouchableMapView(context: Context) : MapView(context) {
@@ -99,35 +107,57 @@ private fun placesOverlayKey(places: List<Place>): String =
 private fun markerCacheKey(place: Place): String =
     "${place.id}|${place.name}|${place.category.code}"
 
+private fun offsetLatForSheet(
+    baseLat: Double,
+    zoom: Double,
+    visibleMapHeightFraction: Float
+): Double {
+    if (visibleMapHeightFraction >= 0.90f) return baseLat
+    val topHeaderFraction = 0.10
+    val openCenterY = (topHeaderFraction + visibleMapHeightFraction.toDouble().coerceIn(0.22, 0.90)) / 2.0
+    val fullScreenLatSpan = 1.42 * 2.0.pow(10.0 - zoom)
+    val deltaSouth = (0.50 - openCenterY) * fullScreenLatSpan
+    return baseLat - deltaSouth
+}
+
 private fun computeFocusCamera(
     focusedZone: Zone?,
     places: List<Place>,
-    isMapFullscreen: Boolean = false
+    isMapFullscreen: Boolean = false,
+    visibleMapHeightFraction: Float = 1.0f
 ): Pair<GeoPoint, Double> {
-    val fullscreenBoost = if (isMapFullscreen) 0.85 else 0.0
+    val sheetZoomAdjust = when {
+        isMapFullscreen -> 0.85
+        visibleMapHeightFraction >= 0.70f -> 0.22
+        visibleMapHeightFraction >= 0.42f -> -0.05
+        else -> -0.35
+    }
     if (focusedZone == null) {
-        return LOOP_OVERVIEW_CENTER to (LOOP_OVERVIEW_ZOOM + fullscreenBoost * 0.6)
+        val zoom = LOOP_OVERVIEW_ZOOM + sheetZoomAdjust
+        val adjLat = offsetLatForSheet(LOOP_OVERVIEW_CENTER.latitude, zoom, visibleMapHeightFraction)
+        return GeoPoint(adjLat, LOOP_OVERVIEW_CENTER.longitude) to zoom
     }
     if (places.isEmpty()) {
-        return GeoPoint(focusedZone.centerLat, focusedZone.centerLng) to (13.2 + fullscreenBoost)
+        val zoom = 13.2 + sheetZoomAdjust
+        val adjLat = offsetLatForSheet(focusedZone.centerLat, zoom, visibleMapHeightFraction)
+        return GeoPoint(adjLat, focusedZone.centerLng) to zoom
     }
     val minLat = places.minOf { it.lat }
     val maxLat = places.maxOf { it.lat }
     val minLng = places.minOf { it.lng }
     val maxLng = places.maxOf { it.lng }
-    // Nhích tâm lên nhẹ (+6% span) để chừa khoảng trống cho nhãn tên ghim phía trên đỉnh mũi tên
     val latSpan = (maxLat - minLat).coerceAtLeast(0.012)
     val lngSpan = (maxLng - minLng).coerceAtLeast(0.015)
     val midLat = (minLat + maxLat) / 2.0 + latSpan * 0.06
     val midLng = (minLng + maxLng) / 2.0
 
-    // Trên khung 350dp (zoom 10.0 hiển thị ~0.41 độ vĩ, ~0.44 độ kinh), chừa biên an toàn 1.55x
     val paddedLat = latSpan * 1.55
     val paddedLng = lngSpan * 1.65
     val zoomLat = 10.0 + (ln(0.41 / paddedLat) / ln(2.0))
     val zoomLng = 10.0 + (ln(0.44 / paddedLng) / ln(2.0))
-    val zoom = (minOf(zoomLat, zoomLng) + fullscreenBoost).coerceIn(9.4, 15.0)
-    return GeoPoint(midLat, midLng) to zoom
+    val zoom = (minOf(zoomLat, zoomLng) + sheetZoomAdjust).coerceIn(9.2, 15.0)
+    val adjLat = offsetLatForSheet(midLat, zoom, visibleMapHeightFraction)
+    return GeoPoint(adjLat, midLng) to zoom
 }
 
 @Composable
@@ -136,6 +166,11 @@ fun RealMapView(
     currentLat: Double?,
     currentLng: Double?,
     focusedZone: Zone? = null,
+    focusedPlace: Place? = null,
+    visibleMapHeightFraction: Float = 1.0f,
+    controlsTopPadding: Dp = 12.dp,
+    cardBottomPadding: Dp = 12.dp,
+    edgeToEdge: Boolean = false,
     trackPoints: List<Pair<Double, Double>> = emptyList(),
     isMapFullscreen: Boolean = false,
     onToggleFullscreen: (() -> Unit)? = null,
@@ -153,6 +188,20 @@ fun RealMapView(
     var myLocationMarkerRef by remember { mutableStateOf<Marker?>(null) }
     var polylineRef by remember { mutableStateOf<Polyline?>(null) }
 
+    // Khi người dùng chạm vào 1 địa điểm trong danh sách tấm trượt, bay bản đồ mượt tới địa điểm đó
+    LaunchedEffect(focusedPlace?.id) {
+        if (focusedPlace != null) {
+            selectedPlace = focusedPlace
+            val targetZoom = 14.6
+            val adjLat = offsetLatForSheet(focusedPlace.lat, targetZoom, visibleMapHeightFraction)
+            mapViewInstance?.controller?.animateTo(
+                GeoPoint(adjLat, focusedPlace.lng),
+                targetZoom,
+                650L
+            )
+        }
+    }
+
     // Tự đóng thẻ chi tiết nếu địa điểm đang chọn không nằm trong vùng lọc hiện tại
     LaunchedEffect(places) {
         val sel = selectedPlace
@@ -161,14 +210,26 @@ fun RealMapView(
         }
     }
 
-    // Tự động di chuyển & căn khung bản đồ mượt mà khi người dùng lọc theo Chặng (Zone)
-    LaunchedEffect(focusedZone?.id) {
+    // Tự động di chuyển & căn khung bản đồ mượt mà khi người dùng lọc theo Chặng hoặc kéo nấc tấm trượt
+    LaunchedEffect(focusedZone?.id, visibleMapHeightFraction) {
         if (!hasMounted) {
             hasMounted = true
             return@LaunchedEffect
         }
-        val (targetCenter, targetZoom) = computeFocusCamera(focusedZone, places, isMapFullscreen)
-        mapViewInstance?.controller?.animateTo(targetCenter, targetZoom, 650L)
+        val fp = focusedPlace
+        if (fp != null && selectedPlace?.id == fp.id) {
+            val targetZoom = 14.6
+            val adjLat = offsetLatForSheet(fp.lat, targetZoom, visibleMapHeightFraction)
+            mapViewInstance?.controller?.animateTo(GeoPoint(adjLat, fp.lng), targetZoom, 500L)
+        } else {
+            val (targetCenter, targetZoom) = computeFocusCamera(
+                focusedZone = focusedZone,
+                places = places,
+                isMapFullscreen = isMapFullscreen,
+                visibleMapHeightFraction = visibleMapHeightFraction
+            )
+            mapViewInstance?.controller?.animateTo(targetCenter, targetZoom, 550L)
+        }
     }
 
     // Cấu hình OSMDroid tối ưu hiệu năng
@@ -187,7 +248,7 @@ fun RealMapView(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(if (edgeToEdge) RectangleShape else RoundedCornerShape(16.dp))
     ) {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
@@ -205,7 +266,12 @@ fun RealMapView(
 
                     minZoomLevel = 8.0
                     maxZoomLevel = 19.0
-                    val (initialCenter, initialZoom) = computeFocusCamera(focusedZone, places, isMapFullscreen)
+                    val (initialCenter, initialZoom) = computeFocusCamera(
+                        focusedZone = focusedZone,
+                        places = places,
+                        isMapFullscreen = isMapFullscreen,
+                        visibleMapHeightFraction = visibleMapHeightFraction
+                    )
                     controller.setZoom(initialZoom)
                     controller.setCenter(initialCenter)
 
@@ -316,21 +382,23 @@ fun RealMapView(
             }
         )
 
-        // Các nút điều khiển nổi (Floating Control Buttons - shadcn style)
+        // Các nút điều khiển nổi kính mờ (AllTrails Floating Map Controls)
         Column(
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .statusBarsPadding()
+                .padding(top = controlsTopPadding, end = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             // Nút định vị vị trí hiện tại của tôi
             Box(
                 modifier = Modifier
-                    .size(38.dp)
+                    .size(42.dp)
+                    .shadow(8.dp, CircleShape, ambientColor = SoftShadowColor, spotColor = SoftShadowColor)
                     .clip(CircleShape)
-                    .background(SurfaceWhite)
+                    .background(SurfaceGlass)
                     .border(BorderStroke(1.dp, BorderSubtle), CircleShape)
-                    .clickable {
+                    .springClickable {
                         if (currentLat != null && currentLng != null) {
                             mapViewInstance?.controller?.animateTo(GeoPoint(currentLat, currentLng), 14.5, 800L)
                         }
@@ -341,19 +409,27 @@ fun RealMapView(
                     Icons.Default.MyLocation,
                     contentDescription = "Vị trí của tôi",
                     tint = if (currentLat != null) EmeraldGreenText else TextMuted,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(19.dp)
                 )
             }
 
             // Nút bao trọn toàn bộ vòng lặp Hà Giang
             Box(
                 modifier = Modifier
-                    .size(38.dp)
+                    .size(42.dp)
+                    .shadow(8.dp, CircleShape, ambientColor = SoftShadowColor, spotColor = SoftShadowColor)
                     .clip(CircleShape)
-                    .background(SurfaceWhite)
+                    .background(SurfaceGlass)
                     .border(BorderStroke(1.dp, BorderSubtle), CircleShape)
-                    .clickable {
-                        mapViewInstance?.controller?.animateTo(LOOP_OVERVIEW_CENTER, LOOP_OVERVIEW_ZOOM, 800L)
+                    .springClickable {
+                        selectedPlace = null
+                        val (overviewCenter, overviewZoom) = computeFocusCamera(
+                            focusedZone = null,
+                            places = emptyList(),
+                            isMapFullscreen = isMapFullscreen,
+                            visibleMapHeightFraction = visibleMapHeightFraction
+                        )
+                        mapViewInstance?.controller?.animateTo(overviewCenter, overviewZoom, 700L)
                     },
                 contentAlignment = Alignment.Center
             ) {
@@ -361,55 +437,59 @@ fun RealMapView(
                     Icons.Default.CropFree,
                     contentDescription = "Toàn cảnh Hà Giang",
                     tint = ElectricOrange,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(19.dp)
                 )
             }
 
             // Nút chuyển đổi kiểu bản đồ (Tiêu chuẩn ⟷ Địa hình Topo)
             Box(
                 modifier = Modifier
-                    .size(38.dp)
+                    .size(42.dp)
+                    .shadow(8.dp, CircleShape, ambientColor = SoftShadowColor, spotColor = SoftShadowColor)
                     .clip(CircleShape)
-                    .background(if (isTopoMode) EmeraldGreenSoft else SurfaceWhite)
+                    .background(if (isTopoMode) EmeraldGreenSoft else SurfaceGlass)
                     .border(BorderStroke(1.dp, if (isTopoMode) EmeraldGreenBorder else BorderSubtle), CircleShape)
-                    .clickable { isTopoMode = !isTopoMode },
+                    .springClickable { isTopoMode = !isTopoMode },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     Icons.Default.Layers,
                     contentDescription = "Đổi kiểu bản đồ",
                     tint = if (isTopoMode) EmeraldGreenText else TextSecondary,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(19.dp)
                 )
             }
 
-            // Nút Phóng to toàn màn hình / Thu nhỏ
+            // Nút Phóng to toàn màn hình / Thu nhỏ (nếu truyền callback)
             if (onToggleFullscreen != null) {
                 Box(
                     modifier = Modifier
-                        .size(38.dp)
+                        .size(42.dp)
+                        .shadow(8.dp, CircleShape, ambientColor = SoftShadowColor, spotColor = SoftShadowColor)
                         .clip(CircleShape)
-                        .background(if (isMapFullscreen) ElectricOrangeSoft else SurfaceWhite)
+                        .background(if (isMapFullscreen) ElectricOrangeSoft else SurfaceGlass)
                         .border(BorderStroke(1.dp, if (isMapFullscreen) ElectricOrangeBorder else BorderSubtle), CircleShape)
-                        .clickable(onClick = onToggleFullscreen),
+                        .springClickable(onClick = onToggleFullscreen),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         if (isMapFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
                         contentDescription = if (isMapFullscreen) "Thu nhỏ" else "Toàn màn hình",
                         tint = if (isMapFullscreen) ElectricOrangeHover else TextSecondary,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(19.dp)
                     )
                 }
             }
         }
 
-        // Card chi tiết địa điểm khi chạm vào marker trên bản đồ
+        // Card chi tiết địa điểm nổi kiểu Airbnb khi chạm vào marker trên bản đồ
         AnimatedVisibility(
             visible = selectedPlace != null,
+            enter = slideInVertically { it / 2 } + fadeIn(),
+            exit = slideOutVertically { it / 2 } + fadeOut(),
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(12.dp)
+                .padding(start = 14.dp, end = 14.dp, bottom = cardBottomPadding)
         ) {
             selectedPlace?.let { place ->
                 ShadcnCard(

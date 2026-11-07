@@ -10,33 +10,30 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.compose.animation.Crossfade
+import androidx.compose.animation.*
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.AutoMode
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
-import com.reed.hagianggo.ui.components.ShadcnBadge
-import com.reed.hagianggo.ui.components.ShadcnBadgeVariant
+import com.reed.hagianggo.model.elevationMeters
 import com.reed.hagianggo.ui.MainViewModel
-import com.reed.hagianggo.ui.components.LiveRideCockpitSheet
-import com.reed.hagianggo.ui.components.PlaceFormDialog
-import com.reed.hagianggo.ui.components.WhatNowBottomSheet
+import com.reed.hagianggo.ui.components.*
 import com.reed.hagianggo.ui.screens.NearbyScreen
 import com.reed.hagianggo.ui.screens.NotebookScreen
 import com.reed.hagianggo.ui.screens.TodayScreen
@@ -69,9 +66,9 @@ class MainActivity : ComponentActivity() {
                 val isCockpitOpen by viewModel.isCockpitOpen.collectAsState()
                 val notificationMessage by viewModel.notificationMessage.collectAsState()
 
+                var showGlobalZonePicker by remember { mutableStateOf(false) }
                 val snackbarHostState = remember { SnackbarHostState() }
 
-                // Request Location & Notification Permission
                 val permissionLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.RequestMultiplePermissions()
                 ) { permissions ->
@@ -101,7 +98,6 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                // Show notification messages via Snackbar
                 LaunchedEffect(notificationMessage) {
                     notificationMessage?.let { msg ->
                         snackbarHostState.showSnackbar(msg)
@@ -109,132 +105,30 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                Scaffold(
-                    snackbarHost = { SnackbarHost(snackbarHostState) },
-                    topBar = {
-                        TopAppBar(
-                            modifier = Modifier.drawBehind {
-                                val strokeWidth = 1.dp.toPx()
-                                drawLine(
-                                    color = BorderSubtle,
-                                    start = Offset(0f, size.height),
-                                    end = Offset(size.width, size.height),
-                                    strokeWidth = strokeWidth
-                                )
-                            },
-                            title = {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Text(
-                                        text = "HÀ GIANG GO",
-                                        style = MaterialTheme.typography.titleMedium.copy(
-                                            fontWeight = FontWeight.Black,
-                                            letterSpacing = 0.5.sp
-                                        ),
-                                        color = TextPrimary
-                                    )
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    // Status badge phong cách shadcn light
-                                    ShadcnBadge(
-                                        text = if (isOutsideHaGiang) "${activeZone?.name ?: "TP. Hà Giang"} • Preview"
-                                        else (activeZone?.name ?: "100% Offline"),
-                                        variant = if (isOutsideHaGiang) ShadcnBadgeVariant.Amber
-                                        else if (currentLocation != null) ShadcnBadgeVariant.Emerald
-                                        else ShadcnBadgeVariant.Default
-                                    )
-                                }
-                            },
-                            actions = {
-                                Box(
-                                    modifier = Modifier
-                                        .padding(end = 12.dp)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(SurfaceMuted)
-                                        .clickable { viewModel.openWhatNow() }
-                                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                    ) {
-                                        Icon(
-                                            Icons.Default.Explore,
-                                            contentDescription = "Làm gì bây giờ?",
-                                            tint = ElectricOrange,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Text(
-                                            text = "Làm gì?",
-                                            color = TextPrimary,
-                                            style = MaterialTheme.typography.labelSmall
-                                        )
-                                    }
-                                }
-                            },
-                            colors = TopAppBarDefaults.topAppBarColors(
-                                containerColor = SurfaceWhite
-                            )
-                        )
-                    },
-                    bottomBar = {
-                        NavigationBar(
-                            modifier = Modifier.drawBehind {
-                                val strokeWidth = 1.dp.toPx()
-                                drawLine(
-                                    color = BorderSubtle,
-                                    start = Offset(0f, 0f),
-                                    end = Offset(size.width, 0f),
-                                    strokeWidth = strokeWidth
-                                )
-                            },
-                            containerColor = SurfaceWhite,
-                            tonalElevation = 0.dp
-                        ) {
-                            val tabs = listOf(
-                                Triple(0, "Chuyến đi", Icons.Default.Map),
-                                Triple(1, "Hôm nay", Icons.Default.Today),
-                                Triple(2, "Gần đây", Icons.Default.NearMe),
-                                Triple(3, "Sổ tay", Icons.Default.LibraryBooks)
-                            )
-
-                            tabs.forEach { (index, title, icon) ->
-                                val isSelected = selectedTab == index
-                                NavigationBarItem(
-                                    selected = isSelected,
-                                    onClick = { viewModel.selectTab(index) },
-                                    icon = {
-                                        Icon(
-                                            icon,
-                                            contentDescription = title,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    },
-                                    label = {
-                                        Text(
-                                            text = title,
-                                            fontSize = 11.sp,
-                                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
-                                        )
-                                    },
-                                    colors = NavigationBarItemDefaults.colors(
-                                        selectedIconColor = ElectricOrange,
-                                        selectedTextColor = ElectricOrange,
-                                        unselectedIconColor = TextMuted,
-                                        unselectedTextColor = TextMuted,
-                                        indicatorColor = Color.Transparent
-                                    )
-                                )
-                            }
-                        }
-                    }
-                ) { innerPadding ->
-                    Crossfade(
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(AppBackground)
+                ) {
+                    // 1. Nội dung 4 màn hình với chuyển động trượt định hướng vật lý (Directional Spatial Slide)
+                    AnimatedContent(
                         targetState = selectedTab,
-                        modifier = Modifier.padding(innerPadding),
-                        label = "TabCrossfade"
+                        transitionSpec = {
+                            val forward = targetState > initialState
+                            val slideSpring = spring<androidx.compose.ui.unit.IntOffset>(
+                                dampingRatio = Spring.DampingRatioNoBouncy,
+                                stiffness = 500f
+                            )
+                            if (forward) {
+                                (slideInHorizontally(slideSpring) { width -> width / 6 } + fadeIn(tween(200)))
+                                    .togetherWith(slideOutHorizontally(tween(180)) { width -> -width / 8 } + fadeOut(tween(150)))
+                            } else {
+                                (slideInHorizontally(slideSpring) { width -> -width / 6 } + fadeIn(tween(200)))
+                                    .togetherWith(slideOutHorizontally(tween(180)) { width -> width / 8 } + fadeOut(tween(150)))
+                            }.using(SizeTransform(clip = false))
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                        label = "MainTabSpatialTransition"
                     ) { tab ->
                         when (tab) {
                             0 -> TripScreen(viewModel = viewModel)
@@ -243,6 +137,97 @@ class MainActivity : ComponentActivity() {
                             3 -> NotebookScreen(viewModel = viewModel)
                         }
                     }
+
+                    // 2. Cụm Header nổi kiểu Flighty (Trạng thái GPS / Độ cao / Nút AI "Làm gì?")
+                    FlightyFloatingHeader(
+                        activeZoneName = activeZone?.name ?: "TP. Hà Giang",
+                        activeAltitudeMeters = if (liveRideState.isTracking && liveRideState.currentAltitude > 10) {
+                            liveRideState.currentAltitude.toInt()
+                        } else {
+                            activeZone?.elevationMeters ?: 120
+                        },
+                        isGpsLive = currentLocation != null,
+                        isOutsideHaGiang = isOutsideHaGiang,
+                        isTrackingRide = liveRideState.isTracking,
+                        currentSpeedKmh = liveRideState.currentSpeedKmh,
+                        onStatusClick = {
+                            if (liveRideState.isTracking) {
+                                viewModel.openCockpit()
+                            } else {
+                                showGlobalZonePicker = true
+                            }
+                        },
+                        onWhatNowClick = { viewModel.openWhatNow() },
+                        modifier = Modifier.align(Alignment.TopCenter)
+                    )
+
+                    // 3. Snackbar thông báo nằm gọn ngay trên Thanh viên thuốc đáy
+                    SnackbarHost(
+                        hostState = snackbarHostState,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .navigationBarsPadding()
+                            .padding(bottom = 82.dp, start = 16.dp, end = 16.dp)
+                    )
+
+                    // 4. Thanh điều hướng viên thuốc nổi (Floating Pill Nav Bar)
+                    FloatingPillNavBar(
+                        selectedTab = selectedTab,
+                        onTabSelected = { viewModel.selectTab(it) },
+                        modifier = Modifier.align(Alignment.BottomCenter)
+                    )
+                }
+
+                // Modal Đổi cụm chặng nhanh từ Header Pill
+                if (showGlobalZonePicker) {
+                    AlertDialog(
+                        onDismissRequest = { showGlobalZonePicker = false },
+                        containerColor = SurfaceWhite,
+                        shape = RoundedCornerShape(20.dp),
+                        title = {
+                            Text(
+                                "Chọn cụm chặng hiện tại",
+                                color = TextPrimary,
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                            )
+                        },
+                        text = {
+                            LazyColumn {
+                                item {
+                                    ListItem(
+                                        headlineContent = { Text("Tự động theo GPS", color = EmeraldGreenText, fontWeight = FontWeight.SemiBold) },
+                                        leadingContent = { Icon(Icons.Default.AutoMode, contentDescription = null, tint = EmeraldGreen) },
+                                        colors = ListItemDefaults.colors(containerColor = SurfaceWhite),
+                                        modifier = Modifier.clickable {
+                                            viewModel.setManualZoneOverride(null)
+                                            showGlobalZonePicker = false
+                                        }
+                                    )
+                                    HorizontalDivider(color = BorderSubtle)
+                                }
+                                items(zones) { zone ->
+                                    ListItem(
+                                        headlineContent = { Text("${zone.seq}. ${zone.name}", color = TextPrimary, fontWeight = FontWeight.Medium) },
+                                        supportingContent = { Text("Độ cao ~${zone.elevationMeters}m", color = TextSecondary) },
+                                        leadingContent = { Icon(Icons.Default.Place, contentDescription = null, tint = ElectricOrange) },
+                                        colors = ListItemDefaults.colors(containerColor = SurfaceWhite),
+                                        modifier = Modifier.clickable {
+                                            viewModel.setManualZoneOverride(zone.id)
+                                            showGlobalZonePicker = false
+                                        }
+                                    )
+                                }
+                            }
+                        },
+                        confirmButton = {
+                            ShadcnButton(
+                                onClick = { showGlobalZonePicker = false },
+                                variant = ShadcnButtonVariant.Ghost
+                            ) {
+                                Text("Đóng", color = TextSecondary)
+                            }
+                        }
+                    )
                 }
 
                 // Bottom Sheet: Làm gì bây giờ?

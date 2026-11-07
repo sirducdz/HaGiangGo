@@ -1,13 +1,18 @@
 package com.reed.hagianggo.ui.components
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -16,14 +21,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.reed.hagianggo.domain.LocationMath
 import com.reed.hagianggo.model.*
 import com.reed.hagianggo.ui.theme.*
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -41,11 +48,18 @@ fun WhatNowBottomSheet(
 ) {
     val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var refreshSpinCount by remember { mutableIntStateOf(0) }
+    val refreshRotation by animateFloatAsState(
+        targetValue = refreshSpinCount * 180f,
+        animationSpec = spring(dampingRatio = 0.72f, stiffness = 320f),
+        label = "RefreshSpin"
+    )
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = SurfaceWhite,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        containerColor = AppBackground,
         contentColor = TextPrimary,
         dragHandle = { BottomSheetDefaults.DragHandle(color = BorderMedium) }
     ) {
@@ -55,203 +69,253 @@ fun WhatNowBottomSheet(
                 .padding(horizontal = 16.dp, vertical = 4.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Tiêu đề & Cụm vị trí
+            // 1. Tiêu đề & Cụm vị trí
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                tint = ElectricOrange,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = "LÀM GÌ BÂY GIỜ?",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp),
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Black,
+                                    letterSpacing = 0.5.sp
+                                ),
                                 color = TextPrimary
                             )
                             Spacer(modifier = Modifier.width(6.dp))
-                            ShadcnBadge(text = "AI GỢI Ý", variant = ShadcnBadgeVariant.Orange)
+                            ShadcnBadge(text = "OFFLINE AI", variant = ShadcnBadgeVariant.Orange)
                         }
+                        Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "Gợi ý thông minh tức thì theo vị trí đèo thực tế",
+                            text = "Gợi ý điểm dừng tối ưu theo quỹ giờ, thời tiết & cự ly đèo",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary
                         )
                     }
-                    IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Default.Close, contentDescription = "Đóng", tint = TextMuted, modifier = Modifier.size(18.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .background(SurfaceWhite)
+                            .springClickable(onClick = onDismiss),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = "Đóng", tint = TextSecondary, modifier = Modifier.size(18.dp))
                     }
                 }
             }
 
-            // Hàng 1: Chọn Cụm Chặng (hoặc GPS tự động)
+            // 2. Chọn Cụm Chặng (hoặc GPS tự động)
             item {
                 ShadcnCard(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp),
+                    shape = RoundedCornerShape(18.dp),
                     backgroundColor = SurfaceWhite,
                     borderColor = BorderSubtle
                 ) {
-                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Icon(Icons.Default.LocationOn, contentDescription = null, tint = ElectricOrange, modifier = Modifier.size(16.dp))
                             Text(
-                                text = "Vị trí: ${activeZone?.name ?: "Tự động theo GPS"}",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                text = "Đang xét tại: ${activeZone?.name ?: "Tự động theo GPS"}",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                                 color = TextPrimary
                             )
                         }
 
-                        // Danh sách chọn chặng nhanh
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             item {
                                 val isAuto = query.zoneId == null
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(if (isAuto) ElectricOrangeSoft else SurfaceMuted)
-                                        .border(BorderStroke(1.dp, if (isAuto) ElectricOrangeBorder else BorderSubtle), RoundedCornerShape(6.dp))
-                                        .clickable { onZoneManualSelected(null) }
-                                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
-                                    Text("Tự động (GPS)", fontSize = 11.sp, color = if (isAuto) ElectricOrangeHover else TextSecondary, fontWeight = FontWeight.SemiBold)
-                                }
+                                WhatNowPillOption(
+                                    text = "Tự động (GPS)",
+                                    isSelected = isAuto,
+                                    onClick = { onZoneManualSelected(null) }
+                                )
                             }
-                            items(zones.sortedBy { it.seq }) { zone ->
+                            items(zones.sortedBy { it.seq }, key = { it.id }) { zone ->
                                 val isSelected = query.zoneId == zone.id
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(if (isSelected) ElectricOrangeSoft else SurfaceMuted)
-                                        .border(BorderStroke(1.dp, if (isSelected) ElectricOrangeBorder else BorderSubtle), RoundedCornerShape(6.dp))
-                                        .clickable { onZoneManualSelected(zone.id) }
-                                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
-                                    Text("${zone.seq}. ${zone.name.split("-")[0].trim()}", fontSize = 11.sp, color = if (isSelected) ElectricOrangeHover else TextSecondary, fontWeight = FontWeight.SemiBold)
-                                }
+                                WhatNowPillOption(
+                                    text = "${zone.seq}. ${zone.name.split("-")[0].trim()}",
+                                    isSelected = isSelected,
+                                    onClick = { onZoneManualSelected(zone.id) }
+                                )
                             }
                         }
                     }
                 }
             }
 
-            // Hàng 2: Bộ 3 Bộ lọc 1 chạm (Thời gian • Thời tiết • Nhu cầu)
+            // 3. Bộ 3 Bộ lọc 1 chạm (Thời gian • Thời tiết • Nhu cầu)
             item {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    // Thời gian
-                    Text(
-                        text = "1. Quỹ thời gian đang có:",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextMuted
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        AvailableDuration.entries.forEach { dur ->
-                            val isSelected = query.availableDuration == dur
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(if (isSelected) ElectricOrangeSoft else SurfaceWhite)
-                                    .border(BorderStroke(1.dp, if (isSelected) ElectricOrangeBorder else BorderSubtle), RoundedCornerShape(8.dp))
-                                    .clickable { onQueryChanged(query.copy(availableDuration = dur)) }
-                                    .padding(vertical = 8.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = dur.title,
-                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                                    fontSize = 12.sp,
-                                    color = if (isSelected) ElectricOrangeHover else TextSecondary
+                ShadcnCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    backgroundColor = SurfaceWhite,
+                    borderColor = BorderSubtle
+                ) {
+                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            text = "1. QUỸ THỜI GIAN ĐANG CÓ",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = TextMuted
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            AvailableDuration.entries.forEach { dur ->
+                                val isSelected = query.availableDuration == dur
+                                val bg by animateColorAsState(
+                                    targetValue = if (isSelected) ElectricOrangeSoft else SurfaceMuted,
+                                    animationSpec = tween(160),
+                                    label = "DurBg"
                                 )
-                            }
-                        }
-                    }
-
-                    // Thời tiết
-                    Text(
-                        text = "2. Thời tiết lúc này:",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextMuted
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        CurrentWeather.entries.forEach { w ->
-                            val isSelected = query.weather == w
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(if (isSelected) ElectricOrangeSoft else SurfaceWhite)
-                                    .border(BorderStroke(1.dp, if (isSelected) ElectricOrangeBorder else BorderSubtle), RoundedCornerShape(8.dp))
-                                    .clickable { onQueryChanged(query.copy(weather = w)) }
-                                    .padding(vertical = 8.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = w.title,
-                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                                    fontSize = 12.sp,
-                                    color = if (isSelected) ElectricOrangeHover else TextSecondary
+                                val border by animateColorAsState(
+                                    targetValue = if (isSelected) ElectricOrangeBorder else BorderSubtle,
+                                    animationSpec = tween(160),
+                                    label = "DurBorder"
                                 )
-                            }
-                        }
-                    }
-
-                    // Nhu cầu
-                    Text(
-                        text = "3. Bạn đang muốn gì:",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextMuted
-                    )
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        items(CurrentNeed.entries) { need ->
-                            val isSelected = query.need == need
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(if (isSelected) ElectricOrangeSoft else SurfaceWhite)
-                                    .border(BorderStroke(1.dp, if (isSelected) ElectricOrangeBorder else BorderSubtle), RoundedCornerShape(8.dp))
-                                    .clickable { onQueryChanged(query.copy(need = need)) }
-                                    .padding(horizontal = 10.dp, vertical = 6.dp)
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    val icon = when (need) {
-                                        CurrentNeed.EAT -> Icons.Default.Restaurant
-                                        CurrentNeed.CAFE_REST -> Icons.Default.LocalCafe
-                                        CurrentNeed.VIEW -> Icons.Default.PhotoCamera
-                                        CurrentNeed.RAIN_SHELTER -> Icons.Default.Umbrella
-                                        CurrentNeed.FUEL_SOS -> Icons.Default.LocalGasStation
-                                        CurrentNeed.ANY -> Icons.Default.Explore
-                                    }
-                                    Icon(
-                                        icon,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(14.dp),
-                                        tint = if (isSelected) ElectricOrangeHover else TextMuted
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(bg)
+                                        .border(BorderStroke(1.dp, border), RoundedCornerShape(12.dp))
+                                        .springClickable { onQueryChanged(query.copy(availableDuration = dur)) }
+                                        .padding(vertical = 9.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
                                     Text(
-                                        need.title,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.SemiBold,
+                                        text = dur.title,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        fontSize = 12.sp,
                                         color = if (isSelected) ElectricOrangeHover else TextSecondary
                                     )
                                 }
                             }
                         }
+
+                        Text(
+                            text = "2. THỜI TIẾT TRÊN ĐÈO LÚC NÀY",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = TextMuted
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            CurrentWeather.entries.forEach { w ->
+                                val isSelected = query.weather == w
+                                val bg by animateColorAsState(
+                                    targetValue = if (isSelected) ElectricOrangeSoft else SurfaceMuted,
+                                    animationSpec = tween(160),
+                                    label = "WeatherBg"
+                                )
+                                val border by animateColorAsState(
+                                    targetValue = if (isSelected) ElectricOrangeBorder else BorderSubtle,
+                                    animationSpec = tween(160),
+                                    label = "WeatherBorder"
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(bg)
+                                        .border(BorderStroke(1.dp, border), RoundedCornerShape(12.dp))
+                                        .springClickable { onQueryChanged(query.copy(weather = w)) }
+                                        .padding(vertical = 9.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            if (w == CurrentWeather.SUNNY) Icons.Default.WbSunny else Icons.Default.Cloud,
+                                            contentDescription = null,
+                                            tint = if (isSelected) ElectricOrangeHover else TextMuted,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(5.dp))
+                                        Text(
+                                            text = w.title,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            fontSize = 12.sp,
+                                            color = if (isSelected) ElectricOrangeHover else TextSecondary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Text(
+                            text = "3. BẠN ĐANG MUỐN GÌ",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = TextMuted
+                        )
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(CurrentNeed.entries, key = { it.code }) { need ->
+                                val isSelected = query.need == need
+                                val bg by animateColorAsState(
+                                    targetValue = if (isSelected) ElectricOrangeSoft else SurfaceMuted,
+                                    animationSpec = tween(160),
+                                    label = "NeedBg"
+                                )
+                                val border by animateColorAsState(
+                                    targetValue = if (isSelected) ElectricOrangeBorder else BorderSubtle,
+                                    animationSpec = tween(160),
+                                    label = "NeedBorder"
+                                )
+                                val icon = when (need) {
+                                    CurrentNeed.EAT -> Icons.Default.Restaurant
+                                    CurrentNeed.CAFE_REST -> Icons.Default.LocalCafe
+                                    CurrentNeed.VIEW -> Icons.Default.PhotoCamera
+                                    CurrentNeed.RAIN_SHELTER -> Icons.Default.Umbrella
+                                    CurrentNeed.FUEL_SOS -> Icons.Default.LocalGasStation
+                                    CurrentNeed.ANY -> Icons.Default.Explore
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .clip(CircleShape)
+                                        .background(bg)
+                                        .border(BorderStroke(1.dp, border), CircleShape)
+                                        .springClickable { onQueryChanged(query.copy(need = need)) }
+                                        .padding(horizontal = 12.dp, vertical = 7.dp)
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            icon,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(14.dp),
+                                            tint = if (isSelected) ElectricOrangeHover else TextMuted
+                                        )
+                                        Spacer(modifier = Modifier.width(5.dp))
+                                        Text(
+                                            need.title,
+                                            fontSize = 11.5.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                                            color = if (isSelected) ElectricOrangeHover else TextSecondary
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
 
-            // Cảnh báo giờ tối đèo (nếu có)
+            // 4. Cảnh báo giờ tối đèo (nếu có)
             val firstWarning = suggestions.firstOrNull { it.isSunsetWarning }
             if (firstWarning != null && firstWarning.sunsetWarningMessage.isNotBlank()) {
                 item {
@@ -264,7 +328,7 @@ fun WhatNowBottomSheet(
                 }
             }
 
-            // Tiêu đề kết quả & Nút Đổi gợi ý khác
+            // 5. Tiêu đề kết quả & Nút Đổi gợi ý khác
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -272,42 +336,62 @@ fun WhatNowBottomSheet(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Top ${suggestions.size} gợi ý tốt nhất:",
+                        text = "TOP ${suggestions.size} GỢI Ý PHÙ HỢP NHẤT",
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                         color = TextMuted
                     )
-                    Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(SurfaceMuted)
-                            .clickable(onClick = onRefreshAlternative)
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    Surface(
+                        modifier = Modifier.springClickable {
+                            refreshSpinCount++
+                            onRefreshAlternative()
+                        },
+                        shape = CircleShape,
+                        color = ElectricOrangeSoft,
+                        border = BorderStroke(1.dp, ElectricOrangeBorder)
                     ) {
-                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(13.dp), tint = ElectricOrange)
-                        Spacer(Modifier.width(4.dp))
-                        Text("Đổi gợi ý", fontSize = 11.sp, color = ElectricOrange, fontWeight = FontWeight.SemiBold)
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Refresh,
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .size(14.dp)
+                                    .graphicsLayer { rotationZ = refreshRotation },
+                                tint = ElectricOrangeHover
+                            )
+                            Spacer(Modifier.width(5.dp))
+                            Text(
+                                "Đổi gợi ý",
+                                fontSize = 11.5.sp,
+                                color = ElectricOrangeHover,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }
 
-            // Danh sách gợi ý
+            // 6. Danh sách gợi ý với animateItem
             if (suggestions.isEmpty()) {
                 item {
                     Box(
-                        modifier = Modifier.fillMaxWidth().padding(32.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(32.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = "Không có địa điểm nào khớp với bộ lọc trên.\nHãy thử nới lỏng quỹ thời gian hoặc chọn nhu cầu 'Linh hoạt' nhé!",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextMuted,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            textAlign = TextAlign.Center
                         )
                     }
                 }
             } else {
-                items(suggestions) { item ->
+                items(suggestions, key = { it.place.id }) { item ->
                     SuggestionCard(
                         result = item,
                         onNavigate = {
@@ -317,15 +401,53 @@ fun WhatNowBottomSheet(
                             LocationMath.openDialerIntent(context, item.place.phone)
                         },
                         onToggleBookmark = { onToggleBookmark(item.place.id) },
-                        onToggleVisited = { onToggleVisited(item.place.id) }
+                        onToggleVisited = { onToggleVisited(item.place.id) },
+                        modifier = Modifier.animateItem(
+                            fadeInSpec = tween(220),
+                            fadeOutSpec = tween(160),
+                            placementSpec = spring(dampingRatio = 0.82f, stiffness = 380f)
+                        )
                     )
                 }
             }
 
             item {
-                Spacer(Modifier.height(32.dp))
+                Spacer(Modifier.height(28.dp))
             }
         }
+    }
+}
+
+@Composable
+private fun WhatNowPillOption(
+    text: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    val bg by animateColorAsState(
+        targetValue = if (isSelected) ElectricOrangeSoft else SurfaceMuted,
+        animationSpec = tween(160),
+        label = "ZoneOptBg"
+    )
+    val border by animateColorAsState(
+        targetValue = if (isSelected) ElectricOrangeBorder else BorderSubtle,
+        animationSpec = tween(160),
+        label = "ZoneOptBorder"
+    )
+    Box(
+        modifier = Modifier
+            .clip(CircleShape)
+            .background(bg)
+            .border(BorderStroke(1.dp, border), CircleShape)
+            .springClickable(onClick = onClick)
+            .padding(horizontal = 11.dp, vertical = 6.dp)
+    ) {
+        Text(
+            text = text,
+            fontSize = 11.5.sp,
+            color = if (isSelected) ElectricOrangeHover else TextSecondary,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold
+        )
     }
 }
 
@@ -335,94 +457,150 @@ fun SuggestionCard(
     onNavigate: () -> Unit,
     onCall: () -> Unit,
     onToggleBookmark: () -> Unit,
-    onToggleVisited: () -> Unit
+    onToggleVisited: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val place = result.place
+    val bookmarkScale by animateFloatAsState(
+        targetValue = if (place.isBookmarked) 1.18f else 1.0f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = 500f),
+        label = "SugBookmarkBounce"
+    )
+    val visitedScale by animateFloatAsState(
+        targetValue = if (place.isVisited) 1.18f else 1.0f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = 500f),
+        label = "SugVisitedBounce"
+    )
 
     ShadcnCard(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(10.dp),
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
         backgroundColor = SurfaceWhite,
         borderColor = BorderSubtle
     ) {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            // Tên & Huy hiệu
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Top
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = place.name,
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                        color = TextPrimary
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = place.name,
+                            style = MaterialTheme.typography.titleSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp
+                            ),
+                            color = TextPrimary
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
                         ShadcnBadge(
-                            text = "${result.distanceKm} km",
+                            text = "${String.format(Locale.US, "%.1f", result.distanceKm)} km",
                             variant = ShadcnBadgeVariant.Emerald
                         )
                         Text(
-                            text = "~${result.travelTimeMin} phút chạy đèo",
-                            style = MaterialTheme.typography.bodySmall,
+                            text = "~${result.travelTimeMin}p chạy đèo",
+                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
                             color = TextSecondary
+                        )
+                        Text(
+                            text = "• ${place.altitudeMeters}m",
+                            style = TelemetryTextStyle.copy(fontSize = 11.sp),
+                            color = TextMuted
                         )
                     }
                 }
 
-                Row {
-                    IconButton(onClick = onToggleBookmark, modifier = Modifier.size(32.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .background(if (place.isBookmarked) ElectricOrangeSoft else SurfaceMuted)
+                            .springClickable(onClick = onToggleBookmark),
+                        contentAlignment = Alignment.Center
+                    ) {
                         Icon(
                             imageVector = if (place.isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
                             contentDescription = "Lưu",
-                            tint = if (place.isBookmarked) ElectricOrange else TextSubtle,
-                            modifier = Modifier.size(18.dp)
+                            tint = if (place.isBookmarked) ElectricOrange else TextMuted,
+                            modifier = Modifier
+                                .size(17.dp)
+                                .graphicsLayer {
+                                    scaleX = bookmarkScale
+                                    scaleY = bookmarkScale
+                                }
                         )
                     }
-                    IconButton(onClick = onToggleVisited, modifier = Modifier.size(32.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .background(if (place.isVisited) EmeraldGreenSoft else SurfaceMuted)
+                            .springClickable(onClick = onToggleVisited),
+                        contentAlignment = Alignment.Center
+                    ) {
                         Icon(
                             imageVector = if (place.isVisited) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
                             contentDescription = "Đã đến",
-                            tint = if (place.isVisited) EmeraldGreen else TextSubtle,
-                            modifier = Modifier.size(18.dp)
+                            tint = if (place.isVisited) EmeraldGreen else TextMuted,
+                            modifier = Modifier
+                                .size(17.dp)
+                                .graphicsLayer {
+                                    scaleX = visitedScale
+                                    scaleY = visitedScale
+                                }
                         )
                     }
                 }
             }
 
-            // Mẹo sống còn (Vital practical tip)
+            if (place.addressHint.isNotBlank()) {
+                Text(
+                    text = "📍 ${place.addressHint}",
+                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                    color = TextPrimary
+                )
+            }
+
             if (place.practicalTip.isNotBlank()) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(6.dp))
+                        .clip(RoundedCornerShape(10.dp))
                         .background(SurfaceMuted)
-                        .border(BorderStroke(1.dp, BorderSubtle), RoundedCornerShape(6.dp))
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                        .padding(horizontal = 10.dp, vertical = 7.dp)
                 ) {
                     Text(
-                        text = "💡 Mẹo: ${place.practicalTip}",
+                        text = "💡 ${place.practicalTip}",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextSecondary
                     )
                 }
             }
 
-            // Nút bấm thao tác
             Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 2.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 ShadcnButton(
                     onClick = onNavigate,
                     variant = ShadcnButtonVariant.Primary,
-                    modifier = Modifier.weight(1f).height(40.dp)
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(40.dp)
                 ) {
-                    Icon(Icons.Default.Navigation, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Default.Navigation, contentDescription = null, modifier = Modifier.size(15.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("DẪN ĐƯỜNG", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                    Text("DẪN ĐƯỜNG", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 }
 
                 if (place.phone.isNotBlank()) {
@@ -431,9 +609,9 @@ fun SuggestionCard(
                         variant = ShadcnButtonVariant.Secondary,
                         modifier = Modifier.height(40.dp)
                     ) {
-                        Icon(Icons.Default.Phone, contentDescription = null, tint = EmeraldGreenText, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("Gọi điện", fontSize = 12.sp)
+                        Icon(Icons.Default.Phone, contentDescription = null, tint = EmeraldGreenText, modifier = Modifier.size(15.dp))
+                        Spacer(Modifier.width(5.dp))
+                        Text("Gọi điện", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }

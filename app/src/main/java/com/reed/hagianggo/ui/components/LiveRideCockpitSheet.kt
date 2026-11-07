@@ -1,7 +1,11 @@
 package com.reed.hagianggo.ui.components
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -15,7 +19,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -24,6 +28,7 @@ import com.reed.hagianggo.domain.LocationMath
 import com.reed.hagianggo.model.*
 import com.reed.hagianggo.ui.theme.*
 import java.util.Calendar
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -37,7 +42,6 @@ fun LiveRideCockpitSheet(
     val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    // Tính thời gian hoàng hôn
     val now = remember { Calendar.getInstance() }
     val currentMinutes = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
     val sunsetMinutes = 17 * 60 + 15
@@ -47,12 +51,33 @@ fun LiveRideCockpitSheet(
     val hours = state.elapsedTimeSeconds / 3600
     val minutes = (state.elapsedTimeSeconds % 3600) / 60
     val seconds = state.elapsedTimeSeconds % 60
-    val timeFormatted = String.format(java.util.Locale.US, "%02d:%02d:%02d", hours, minutes, seconds)
+    val timeFormatted = String.format(Locale.US, "%02d:%02d:%02d", hours, minutes, seconds)
+
+    val infiniteTransition = rememberInfiniteTransition(label = "CockpitBeacon")
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 0.9f,
+        targetValue = 1.55f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "CockpitPulseScale"
+    )
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.25f,
+        targetValue = 0.75f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "CockpitPulseAlpha"
+    )
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = SurfaceWhite,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        containerColor = AppBackground,
         contentColor = TextPrimary,
         dragHandle = { BottomSheetDefaults.DragHandle(color = BorderMedium) }
     ) {
@@ -63,209 +88,223 @@ fun LiveRideCockpitSheet(
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Header Bar
+            // 1. Flighty Telemetry Header Bar
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(if (state.isPaused) AmberWarning else EmeraldGreen)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = if (state.isPaused) "TẠM DỪNG CHẶNG" else "LIVE RIDE TELEMETRY",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        color = if (state.isPaused) AmberWarningText else EmeraldGreenText
-                    )
-                }
-
-                IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Thu nhỏ", tint = TextMuted)
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Dual Giant Gauges: Vận tốc & Cao độ (phong cách HUD đồng hồ xe)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                // Đồng hồ Vận tốc
-                ShadcnCard(
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp),
-                    backgroundColor = SurfaceWhite,
-                    borderColor = BorderSubtle
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 14.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = "VẬN TỐC",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = TextMuted
-                        )
-                        Text(
-                            text = state.currentSpeedKmh.toInt().toString(),
-                            style = TelemetryTextStyle.copy(fontSize = 54.sp),
-                            color = ElectricOrange
-                        )
-                        Text(
-                            text = "km/h",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = TextMuted
-                        )
-                    }
-                }
-
-                // Đồng hồ Độ cao (Altitude)
-                ShadcnCard(
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp),
-                    backgroundColor = SurfaceWhite,
-                    borderColor = BorderSubtle
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 14.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Landscape, contentDescription = null, tint = EmeraldGreenText, modifier = Modifier.size(13.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "CAO ĐỘ",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = TextMuted
+                    val dotColor = if (state.isPaused) AmberWarning else EmeraldGreen
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(18.dp)) {
+                        if (!state.isPaused) {
+                            Box(
+                                modifier = Modifier
+                                    .size(15.dp)
+                                    .graphicsLayer {
+                                        scaleX = pulseScale
+                                        scaleY = pulseScale
+                                        alpha = pulseAlpha * 0.45f
+                                    }
+                                    .clip(CircleShape)
+                                    .background(dotColor)
                             )
                         }
+                        Box(
+                            modifier = Modifier
+                                .size(9.dp)
+                                .clip(CircleShape)
+                                .background(dotColor)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column {
                         Text(
-                            text = state.currentAltitude.toInt().toString(),
-                            style = TelemetryTextStyle.copy(fontSize = 54.sp),
-                            color = EmeraldGreenText
+                            text = if (state.isPaused) "TẠM DỪNG GHI HÀNH TRÌNH" else "BUỒNG LÁI ĐÈO LIVE TELEMETRY",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Black,
+                                letterSpacing = 0.6.sp
+                            ),
+                            color = if (state.isPaused) AmberWarningText else EmeraldGreenText
                         )
                         Text(
-                            text = "mét / biển",
-                            style = MaterialTheme.typography.labelSmall,
+                            text = "GPS Offline • Đang theo dõi tốc độ & cao độ",
+                            style = MaterialTheme.typography.bodySmall,
                             color = TextMuted
                         )
                     }
                 }
+
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(SurfaceWhite)
+                        .springClickable(onClick = onDismiss),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Thu nhỏ", tint = TextSecondary)
+                }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-            // Stats Strip: Quãng đường • Thời gian • Max Speed
+            // 2. Dual Radial HUD Gauges: Vận tốc & Cao độ (AnimatedArcGauge)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                AnimatedArcGauge(
+                    label = "VẬN TỐC",
+                    value = state.currentSpeedKmh,
+                    maxValue = 80f,
+                    unit = "km/h",
+                    accentColor = ElectricOrange,
+                    softColor = ElectricOrangeSoft,
+                    modifier = Modifier.weight(1f)
+                )
+
+                AnimatedArcGauge(
+                    label = "CAO ĐỘ",
+                    value = state.currentAltitude.toFloat(),
+                    maxValue = 1800f,
+                    unit = "mét / biển",
+                    accentColor = EmeraldGreenText,
+                    softColor = EmeraldGreenSoft,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // 3. Bento Stats Strip: Quãng đường • Thời gian • Tốc độ Max
             ShadcnCard(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(10.dp),
-                backgroundColor = SurfaceMuted,
+                shape = RoundedCornerShape(18.dp),
+                backgroundColor = SurfaceWhite,
                 borderColor = BorderSubtle
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceAround
+                        .padding(horizontal = 14.dp, vertical = 14.dp),
+                    horizontalArrangement = Arrangement.SpaceAround,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("QUÃNG ĐƯỜNG", style = MaterialTheme.typography.labelSmall, color = TextMuted)
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = "${String.format(java.util.Locale.US, "%.1f", state.totalDistanceKm)} km",
-                            style = TelemetryTextStyle.copy(fontSize = 15.sp),
+                        Spacer(modifier = Modifier.height(3.dp))
+                        RollingNumberText(
+                            targetValue = state.totalDistanceKm.toFloat(),
+                            decimals = 1,
+                            suffix = " km",
+                            style = TelemetryTextStyle.copy(fontSize = 16.sp),
                             color = TextPrimary
                         )
                     }
+
+                    Box(
+                        modifier = Modifier
+                            .width(1.dp)
+                            .height(28.dp)
+                            .background(BorderSubtle)
+                    )
+
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("THỜI GIAN", style = MaterialTheme.typography.labelSmall, color = TextMuted)
-                        Spacer(modifier = Modifier.height(2.dp))
+                        Text("THỜI GIAN CHẠY", style = MaterialTheme.typography.labelSmall, color = TextMuted)
+                        Spacer(modifier = Modifier.height(3.dp))
                         Text(
                             text = timeFormatted,
-                            style = TelemetryTextStyle.copy(fontSize = 15.sp),
+                            style = TelemetryTextStyle.copy(fontSize = 16.sp, fontFeatureSettings = "tnum"),
                             color = TextPrimary
                         )
                     }
+
+                    Box(
+                        modifier = Modifier
+                            .width(1.dp)
+                            .height(28.dp)
+                            .background(BorderSubtle)
+                    )
+
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("TỐC ĐỘ MAX", style = MaterialTheme.typography.labelSmall, color = TextMuted)
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = "${state.maxSpeedKmh.toInt()} km/h",
-                            style = TelemetryTextStyle.copy(fontSize = 15.sp),
+                        Spacer(modifier = Modifier.height(3.dp))
+                        RollingNumberText(
+                            targetValue = state.maxSpeedKmh,
+                            suffix = " km/h",
+                            style = TelemetryTextStyle.copy(fontSize = 16.sp),
                             color = ElectricOrangeHover
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // Sunset Countdown Banner
+            // 4. Sunset Countdown Banner
             ShadcnAlert(
                 title = if (minutesUntilSunset > 0) "Hoàng hôn đèo (17:15): Còn ${minutesUntilSunset / 60}h ${minutesUntilSunset % 60}p"
                 else "ĐÃ TỐI TRÊN ĐÈO! NÊN VỀ ĐIỂM NGHỈ",
-                description = "Đèo Hà Giang không có đèn chiếu sáng, nhiều sương mù và dốc quanh co rất nguy hiểm.",
+                description = "Đèo Hà Giang không có đèn chiếu sáng, dễ sương mù đặc và khúc cua tay áo khuất tầm nhìn.",
                 variant = if (isNearDark) ShadcnBadgeVariant.Rose else ShadcnBadgeVariant.Amber,
                 icon = if (isNearDark) Icons.Default.Warning else Icons.Default.WbTwilight
             )
 
-            // Auto Check-in Toast / Badge
+            // 5. Auto Check-in Badge
             if (!state.lastVisitedPlaceName.isNullOrBlank()) {
                 Spacer(modifier = Modifier.height(10.dp))
                 ShadcnCard(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp),
+                    shape = RoundedCornerShape(14.dp),
                     backgroundColor = EmeraldGreenSoft,
                     borderColor = EmeraldGreenBorder
                 ) {
                     Row(
-                        modifier = Modifier.padding(10.dp),
+                        modifier = Modifier.padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = EmeraldGreenText, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = EmeraldGreenText, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "Vừa tự động check-in: ${state.lastVisitedPlaceName}",
-                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
                             color = EmeraldGreenText
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Điểm kế tiếp phía trước (Next Milestone)
+            // 6. Next Milestone Radar Card
             if (state.nextMilestonePlace != null) {
                 val nextPlace = state.nextMilestonePlace
+                Spacer(modifier = Modifier.height(12.dp))
                 ShadcnCard(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp),
+                    shape = RoundedCornerShape(18.dp),
                     backgroundColor = SurfaceWhite,
-                    borderColor = BorderSubtle
+                    borderColor = ElectricOrangeBorder
                 ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
+                    Column(modifier = Modifier.padding(14.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.NearMe, contentDescription = null, tint = ElectricOrange, modifier = Modifier.size(15.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clip(CircleShape)
+                                    .background(ElectricOrangeSoft),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.NearMe, contentDescription = null, tint = ElectricOrange, modifier = Modifier.size(14.dp))
+                            }
+                            Spacer(modifier = Modifier.width(7.dp))
                             Text(
-                                text = "ĐIỂM GẦN NHẤT PHÍA TRƯỚC",
-                                style = MaterialTheme.typography.labelSmall,
+                                text = "MỐC KẾ TIẾP PHÍA TRƯỚC",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                 color = ElectricOrangeHover
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -275,44 +314,54 @@ fun LiveRideCockpitSheet(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = nextPlace.name,
-                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                                     color = TextPrimary
                                 )
                                 Text(
-                                    text = "${nextPlace.category.label} • Còn ~${String.format(java.util.Locale.US, "%.1f", state.distanceToNextKm)} km",
+                                    text = "${nextPlace.category.label} • Cách ~${String.format(Locale.US, "%.1f", state.distanceToNextKm)} km • ${nextPlace.altitudeMeters}m",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = TextSecondary
                                 )
                             }
+
+                            Spacer(modifier = Modifier.width(8.dp))
 
                             ShadcnButton(
                                 onClick = {
                                     LocationMath.openNavigationIntent(context, nextPlace.lat, nextPlace.lng, nextPlace.name)
                                 },
                                 variant = ShadcnButtonVariant.Primary,
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                             ) {
-                                Icon(Icons.Default.Directions, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Icon(Icons.Default.Directions, contentDescription = null, modifier = Modifier.size(15.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Dẫn đường", fontSize = 11.sp)
+                                Text("Dẫn đường", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             }
                         }
 
                         if (nextPlace.practicalTip.isNotBlank()) {
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = "💡 ${nextPlace.practicalTip}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = TextSecondary
-                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(SurfaceMuted)
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = "💡 ${nextPlace.practicalTip}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSecondary
+                                )
+                            }
                         }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // Action Buttons: Tạm dừng / Tiếp tục & Kết thúc
+            // 7. Tactile Ride Control Buttons
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -321,32 +370,38 @@ fun LiveRideCockpitSheet(
                     ShadcnButton(
                         onClick = onResume,
                         variant = ShadcnButtonVariant.Primary,
-                        modifier = Modifier.weight(1f).height(46.dp)
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
                     ) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Tiếp tục", fontWeight = FontWeight.SemiBold)
+                        Text("Tiếp tục chặng", fontWeight = FontWeight.Bold)
                     }
                 } else {
                     ShadcnButton(
                         onClick = onPause,
                         variant = ShadcnButtonVariant.Secondary,
-                        modifier = Modifier.weight(1f).height(46.dp)
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
                     ) {
-                        Icon(Icons.Default.Pause, contentDescription = null, tint = AmberWarningText, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.Pause, contentDescription = null, tint = AmberWarningText, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Tạm dừng", fontWeight = FontWeight.SemiBold, color = AmberWarningText)
+                        Text("Tạm dừng", fontWeight = FontWeight.Bold, color = AmberWarningText)
                     }
                 }
 
                 ShadcnButton(
                     onClick = onStop,
                     variant = ShadcnButtonVariant.Destructive,
-                    modifier = Modifier.weight(1f).height(46.dp)
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp)
                 ) {
-                    Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Kết thúc chặng", fontWeight = FontWeight.SemiBold)
+                    Text("Kết thúc chặng", fontWeight = FontWeight.Bold)
                 }
             }
 

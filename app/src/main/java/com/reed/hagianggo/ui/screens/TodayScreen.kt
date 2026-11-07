@@ -1,13 +1,16 @@
 package com.reed.hagianggo.ui.screens
 
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -19,10 +22,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.reed.hagianggo.domain.LocationMath
@@ -31,6 +39,7 @@ import com.reed.hagianggo.ui.MainViewModel
 import com.reed.hagianggo.ui.components.*
 import com.reed.hagianggo.ui.theme.*
 import java.util.Calendar
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,68 +53,121 @@ fun TodayScreen(
     val places by viewModel.places.collectAsState()
     val itinerarySlots by viewModel.itinerarySlots.collectAsState()
     val activeZone by viewModel.activeZone.collectAsState()
-    val isGpsEnabled by viewModel.isGpsEnabled.collectAsState()
     val currentLocation by viewModel.currentLocation.collectAsState()
     val isOutsideHaGiang by viewModel.isOutsideHaGiang.collectAsState()
     val distanceToHaGiangKm by viewModel.distanceToHaGiangKm.collectAsState()
     val liveRideState by viewModel.liveRideState.collectAsState()
 
     var selectedDay by remember { mutableIntStateOf(1) }
-    var showZonePicker by remember { mutableStateOf(false) }
+    var highlightedPlaceId by remember { mutableStateOf<String?>(null) }
 
-    // Tính thời gian hoàng hôn trên đèo Hà Giang (~17:15)
     val now = remember { Calendar.getInstance() }
     val currentHour = now.get(Calendar.HOUR_OF_DAY)
     val currentMinute = now.get(Calendar.MINUTE)
     val currentTotalMinutes = currentHour * 60 + currentMinute
-    val sunsetMinutes = 17 * 60 + 15 // 17:15
+    val sunsetMinutes = 17 * 60 + 15
     val minutesUntilSunset = sunsetMinutes - currentTotalMinutes
-    val isNearDark = currentTotalMinutes >= (16 * 60 + 30) // sau 16:30
+    val isNearDark = currentTotalMinutes >= (16 * 60 + 30)
     val isNight = currentTotalMinutes >= sunsetMinutes
 
-    // Places map
     val placesById = remember(places) { places.associateBy { it.id } }
 
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        containerColor = AppBackground
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(16.dp, 12.dp, 16.dp, 96.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            // 1. Hero Action: "LÀM GÌ BÂY GIỜ?" (shadcn light callout)
-            item {
-                ShadcnCard(
+    val daySlots = remember(itinerarySlots, selectedDay) {
+        itinerarySlots.filter { it.dayNumber == selectedDay }
+    }
+    val orderedDayPlaces = remember(daySlots, placesById) {
+        listOf(TimeSlot.MORNING, TimeSlot.NOON, TimeSlot.AFTERNOON, TimeSlot.EVENING)
+            .flatMap { slot ->
+                daySlots.filter { it.slot == slot }
+                    .flatMap { item -> item.suggestedPlaceIds.mapNotNull { placesById[it] } }
+            }
+            .distinctBy { it.id }
+    }
+
+    val topClearance = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 72.dp
+    val bottomClearance = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 96.dp
+
+    LazyColumn(
+        modifier = modifier
+            .fillMaxSize()
+            .background(AppBackground),
+        contentPadding = PaddingValues(
+            top = topClearance,
+            bottom = bottomClearance,
+            start = 16.dp,
+            end = 16.dp
+        ),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // =====================================================================
+        // 1. HERO EDITORIAL CARD: "LÀM GÌ BÂY GIỜ?" KÈM ĐƯỜNG ĐỒNG MỨC TOPO
+        // =====================================================================
+        item(key = "hero_what_now") {
+            ShadcnCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(22.dp),
+                backgroundColor = SurfaceWhite,
+                borderColor = ElectricOrangeBorder,
+                onClick = { viewModel.openWhatNow() }
+            ) {
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { viewModel.openWhatNow() },
-                    shape = RoundedCornerShape(12.dp),
-                    backgroundColor = SurfaceWhite,
-                    borderColor = ElectricOrangeBorder
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(
+                                    Color(0xFFFFFBF7),
+                                    ElectricOrangeSoft
+                                )
+                            )
+                        )
                 ) {
+                    // Họa tiết đường đồng mức địa hình (Topographic Contours) vẽ bằng Vector Canvas
+                    Canvas(
+                        modifier = Modifier
+                            .matchParentSize()
+                    ) {
+                        val w = size.width
+                        val h = size.height
+                        listOf(0.55f, 0.72f, 0.88f).forEachIndexed { idx, rx ->
+                            val path = Path().apply {
+                                moveTo(w * rx, 0f)
+                                cubicTo(
+                                    w * (rx - 0.12f), h * 0.35f,
+                                    w * (rx + 0.08f), h * 0.70f,
+                                    w * (rx - 0.05f), h
+                                )
+                            }
+                            drawPath(
+                                path = path,
+                                color = ElectricOrange.copy(alpha = 0.08f + idx * 0.03f),
+                                style = Stroke(width = 1.5.dp.toPx())
+                            )
+                        }
+                    }
+
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp),
+                            .padding(18.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(46.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(ElectricOrangeSoft)
-                                .border(BorderStroke(1.dp, ElectricOrangeBorder), RoundedCornerShape(10.dp)),
+                                .size(52.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(
+                                    Brush.linearGradient(
+                                        listOf(ElectricOrange, ElectricOrangeHover)
+                                    )
+                                ),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                Icons.Default.Explore,
+                                Icons.Default.AutoAwesome,
                                 contentDescription = null,
-                                tint = ElectricOrange,
-                                modifier = Modifier.size(24.dp)
+                                tint = Color.White,
+                                modifier = Modifier.size(26.dp)
                             )
                         }
 
@@ -116,53 +178,76 @@ fun TodayScreen(
                                 Text(
                                     text = "LÀM GÌ BÂY GIỜ?",
                                     style = MaterialTheme.typography.titleMedium.copy(
-                                        fontWeight = FontWeight.Bold,
-                                        letterSpacing = 0.5.sp
+                                        fontWeight = FontWeight.Black,
+                                        letterSpacing = 0.4.sp
                                     ),
                                     color = TextPrimary
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
-                                ShadcnBadge(text = "AI GỢI Ý", variant = ShadcnBadgeVariant.Orange)
+                                ShadcnBadge(text = "AI ĐÈO NÚI", variant = ShadcnBadgeVariant.Orange)
                             }
-                            Spacer(modifier = Modifier.height(2.dp))
+                            Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "Đang ở ${activeZone?.name ?: "Hà Giang"} • Chạm để tìm điểm tiếp theo",
+                                text = "Gợi ý điểm ăn, trú mưa, xăng & ngắm cảnh tối ưu ngay tại ${activeZone?.name ?: "Hà Giang"}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = TextSecondary
                             )
                         }
 
-                        Icon(
-                            Icons.Default.ArrowForwardIos,
-                            contentDescription = null,
-                            tint = TextSubtle,
-                            modifier = Modifier.size(14.dp)
-                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(SurfaceWhite)
+                                .border(BorderStroke(1.dp, ElectricOrangeBorder), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.ArrowForward,
+                                contentDescription = null,
+                                tint = ElectricOrangeHover,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                     }
                 }
             }
+        }
 
-            // 2. Live Ride Mode Toggle Banner
-            item {
-                if (!liveRideState.isTracking) {
-                    ShadcnCard(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { viewModel.startRide() },
-                        shape = RoundedCornerShape(10.dp),
-                        backgroundColor = SurfaceWhite,
-                        borderColor = EmeraldGreenBorder
+        // =====================================================================
+        // 2. BENTO COCKPIT ROW: LIVE RIDE TELEMETRY × ĐẾM NGƯỢC HOÀNG HÔN ĐÈO
+        // =====================================================================
+        item(key = "bento_cockpit_row") {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Bento Trái: Live Ride Mode
+                ShadcnCard(
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(18.dp),
+                    backgroundColor = SurfaceWhite,
+                    borderColor = if (liveRideState.isTracking) EmeraldGreenBorder else BorderSubtle,
+                    onClick = {
+                        if (!liveRideState.isTracking) viewModel.startRide()
+                        viewModel.openCockpit()
+                    }
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(RoundedCornerShape(8.dp))
+                                    .size(34.dp)
+                                    .clip(RoundedCornerShape(10.dp))
                                     .background(EmeraldGreenSoft),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -170,321 +255,245 @@ fun TodayScreen(
                                     Icons.Default.TwoWheeler,
                                     contentDescription = null,
                                     tint = EmeraldGreenText,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
+                            ShadcnBadge(
+                                text = if (liveRideState.isTracking) "LIVE" else "HUD",
+                                variant = ShadcnBadgeVariant.Emerald
+                            )
+                        }
 
-                            Spacer(modifier = Modifier.width(12.dp))
-
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "CHẾ ĐỘ PHƯỢT (LIVE RIDE)",
-                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = EmeraldGreenText
-                                )
-                                Text(
-                                    text = "Đo độ cao mét, tốc độ GPS & tự động check-in",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = TextSecondary
-                                )
-                            }
-
-                            Icon(
-                                Icons.Default.PlayArrow,
-                                contentDescription = null,
-                                tint = EmeraldGreenText,
-                                modifier = Modifier.size(20.dp)
+                        if (liveRideState.isTracking) {
+                            RollingNumberText(
+                                targetValue = liveRideState.currentSpeedKmh,
+                                suffix = " km/h",
+                                style = TelemetryTextStyle.copy(fontSize = 20.sp),
+                                color = EmeraldGreenText
+                            )
+                            Text(
+                                text = "${String.format(Locale.US, "%.1f", liveRideState.totalDistanceKm)} km • ${liveRideState.currentAltitude.toInt()}m",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextSecondary,
+                                maxLines = 1
+                            )
+                        } else {
+                            Text(
+                                text = "Chế độ Phượt",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                color = TextPrimary
+                            )
+                            Text(
+                                text = "Đo tốc độ, cao độ & tự check-in",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
-                } else {
-                    ShadcnCard(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { viewModel.openCockpit() },
-                        shape = RoundedCornerShape(10.dp),
-                        backgroundColor = SurfaceWhite,
-                        borderColor = if (liveRideState.isPaused) AmberWarningBorder else EmeraldGreenBorder
+                }
+
+                // Bento Phải: Đồng hồ an toàn Hoàng hôn đèo (Flighty Status Widget)
+                val (sunBg, sunBorder, sunTint) = when {
+                    isNight -> Triple(RoseDestructiveSoft, RoseDestructiveBorder, RoseDestructiveText)
+                    isNearDark -> Triple(AmberWarningSoft, AmberWarningBorder, AmberWarningText)
+                    else -> Triple(SkyTelemetrySoft, SkyTelemetryBorder, SkyTelemetry)
+                }
+
+                ShadcnCard(
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(18.dp),
+                    backgroundColor = SurfaceWhite,
+                    borderColor = sunBorder
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(if (liveRideState.isPaused) AmberWarning else EmeraldGreen)
-                            )
-
-                            Spacer(modifier = Modifier.width(10.dp))
-
-                            Column(modifier = Modifier.weight(1f)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        text = if (liveRideState.isPaused) "CHẶNG ĐANG TẠM DỪNG" else "ĐANG GHI HÀNH TRÌNH",
-                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                        color = if (liveRideState.isPaused) AmberWarningText else EmeraldGreenText
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = "• ${String.format(java.util.Locale.US, "%.1f", liveRideState.totalDistanceKm)} km",
-                                        color = TextMuted,
-                                        style = MaterialTheme.typography.labelSmall
-                                    )
-                                }
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = "${liveRideState.currentSpeedKmh.toInt()} km/h • ${liveRideState.currentAltitude.toInt()}m cao độ",
-                                    style = TelemetryTextStyle.copy(fontSize = 13.sp),
-                                    color = TextPrimary
+                                    .size(34.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(sunBg),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    if (isNight) Icons.Default.NightsStay else Icons.Default.WbTwilight,
+                                    contentDescription = null,
+                                    tint = sunTint,
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
-
                             ShadcnBadge(
-                                text = "MỞ HUD",
-                                variant = ShadcnBadgeVariant.Emerald
+                                text = "17:15 TỐI",
+                                variant = if (isNight) ShadcnBadgeVariant.Rose else if (isNearDark) ShadcnBadgeVariant.Amber else ShadcnBadgeVariant.Sky
                             )
                         }
-                    }
-                }
-            }
 
-            // 3. Location & Zone Status Pill
-            item {
-                ShadcnCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp),
-                    backgroundColor = SurfaceWhite,
-                    borderColor = BorderSubtle
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Icon(
-                                if (currentLocation != null) Icons.Default.GpsFixed else Icons.Default.GpsNotFixed,
-                                contentDescription = null,
-                                tint = if (isOutsideHaGiang) AmberWarningText else if (currentLocation != null) EmeraldGreenText else TextMuted,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Column {
-                                Text(
-                                    text = if (isOutsideHaGiang) "GPS: Ngoài Hà Giang (~${distanceToHaGiangKm?.toInt() ?: 0} km)"
-                                    else if (currentLocation != null) "Vị trí GPS: Hoạt động"
-                                    else "Chưa có tín hiệu GPS",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = if (isOutsideHaGiang) AmberWarningText else if (currentLocation != null) EmeraldGreenText else TextSecondary
-                                )
-                                Text(
-                                    text = if (isOutsideHaGiang) "Khu vực: ${activeZone?.name ?: "TP. Hà Giang"} (Xem trước)"
-                                    else "Khu vực: ${activeZone?.name ?: "Chưa xác định"}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = TextSecondary
-                                )
-                            }
-                        }
-
-                        ShadcnButton(
-                            onClick = { showZonePicker = true },
-                            variant = ShadcnButtonVariant.Secondary,
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(12.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Đổi vùng", fontSize = 11.sp)
-                        }
-                    }
-                }
-            }
-
-            // 4. Mountain Sunset Warning Banner (Pastel Amber/Rose Alert)
-            item {
-                val alertVariant = when {
-                    isNight -> ShadcnBadgeVariant.Rose
-                    isNearDark -> ShadcnBadgeVariant.Amber
-                    else -> ShadcnBadgeVariant.Default
-                }
-
-                ShadcnAlert(
-                    title = when {
-                        isNight -> "ĐÃ TỐI TRÊN ĐÈO HÀ GIANG!"
-                        isNearDark -> "CẢNH BÁO HOÀNG HÔN SẮP TẮT (${minutesUntilSunset} phút nữa)"
-                        else -> "Thời gian an toàn đến hoàng hôn (17:15)"
-                    },
-                    description = when {
-                        isNight -> "Nên về homestay ngay. Đèo núi đêm tối om, cua gấp và nhiều sương mù rất nguy hiểm!"
-                        isNearDark -> "Nên giảm tốc độ và chốt điểm nghỉ/ăn tối trước 17:15 để tránh chạy đèo đêm."
-                        else -> "Còn khoảng ${minutesUntilSunset / 60}h ${minutesUntilSunset % 60}p ánh sáng ban ngày. Hãy căn giờ vượt đèo hợp lý."
-                    },
-                    variant = alertVariant,
-                    icon = if (isNight || isNearDark) Icons.Default.Warning else Icons.Default.WbSunny
-                )
-            }
-
-            // 5. Day Tabs (Shadcn segmented tabs)
-            item {
-                val daysList = (1..config.durationDays).toList()
-                ShadcnSegmentedTabs(
-                    items = daysList,
-                    selectedItem = selectedDay,
-                    onItemSelected = { selectedDay = it },
-                    modifier = Modifier.fillMaxWidth()
-                ) { day, isSelected ->
-                    Text(
-                        text = "Ngày $day",
-                        color = if (isSelected) TextPrimary else TextMuted,
-                        fontSize = 12.sp,
-                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
-                    )
-                }
-            }
-
-            // 6. Day Route Summary Hint
-            item {
-                val dayRouteHint = when (selectedDay) {
-                    1 -> "📍 Chặng Ngày 1: TP. Hà Giang ➔ Dốc Bắc Sum ➔ Cổng Trời Quản Bạ ➔ Rừng Thông Yên Minh ➔ Phố Cáo ➔ Phố Cổ Đồng Văn (~140km)"
-                    2 -> "📍 Chặng Ngày 2: Đồng Văn ➔ Cột Cờ Lũng Cú ➔ Làng Lô Lô Chải ➔ Đèo Mã Pí Lèng ➔ Hẻm Tu Sản / Sông Nho Quế ➔ Mèo Vạc (~80km)"
-                    3 -> "📍 Chặng Ngày 3: Mèo Vạc ➔ Cua Chữ M ➔ Thác Du Già ➔ Đường Thượng ➔ Về lại TP. Hà Giang (~150km)"
-                    else -> "📍 Chặng Ngày $selectedDay: Khám phá thêm các bản làng, chợ phiên và trở về an toàn."
-                }
-                ShadcnCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp),
-                    backgroundColor = SurfaceWhite,
-                    borderColor = BorderSubtle
-                ) {
-                    Text(
-                        text = dayRouteHint,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary,
-                        modifier = Modifier.padding(10.dp)
-                    )
-                }
-            }
-
-            // 7. Timeline of Activities for Selected Day
-            val daySlots = itinerarySlots.filter { it.dayNumber == selectedDay }
-
-            listOf(TimeSlot.MORNING, TimeSlot.NOON, TimeSlot.AFTERNOON, TimeSlot.EVENING).forEach { slot ->
-                item(key = "header_${slot.name}") {
-                    TimeSlotHeader(slot)
-                }
-
-                val slotsInThisTime = daySlots.filter { it.slot == slot }
-                val placesForSlot = slotsInThisTime.flatMap { item ->
-                    item.suggestedPlaceIds.mapNotNull { pid -> placesById[pid]?.let { p -> item to p } }
-                }
-
-                if (placesForSlot.isEmpty()) {
-                    item(key = "empty_${slot.name}") {
                         Text(
-                            text = "Chưa có điểm nào được ghim trong ${slot.label.lowercase()}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextMuted,
-                            modifier = Modifier.padding(start = 12.dp, bottom = 4.dp)
-                        )
-                    }
-                } else {
-                    items(placesForSlot, key = { (slotItem, place) -> "${slotItem.id}_${place.id}" }) { (slotItem, place) ->
-                        ItineraryPlaceCard(
-                            place = place,
-                            customNote = slotItem.title,
-                            onNavigate = {
-                                LocationMath.openNavigationIntent(context, place.latitude, place.longitude, place.name)
+                            text = when {
+                                isNight -> "Đèo đã tối!"
+                                minutesUntilSunset > 0 -> "Còn ${minutesUntilSunset / 60}h ${minutesUntilSunset % 60}p"
+                                else -> "Sắp tối đèo"
                             },
-                            onToggleVisited = { viewModel.toggleVisited(place.id) },
-                            onCall = {
-                                if (place.phoneNumber.isNotBlank()) {
-                                    LocationMath.openDialerIntent(context, place.phoneNumber)
-                                }
-                            }
+                            style = TelemetryTextStyle.copy(fontSize = 18.sp),
+                            color = if (isNight) RoseDestructiveText else TextPrimary
+                        )
+                        Text(
+                            text = when {
+                                isNight -> "Nghỉ đêm, tránh đổ đèo mù"
+                                isNearDark -> "Chốt homestay & đổ xăng"
+                                isOutsideHaGiang -> "Cách Hà Giang ~${distanceToHaGiangKm?.toInt() ?: 0}km"
+                                else -> "Khung giờ sáng an toàn"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
             }
         }
-    }
 
-    // Modal chọn zone override tay khi offline/ở thung lũng
-    if (showZonePicker) {
-        AlertDialog(
-            onDismissRequest = { showZonePicker = false },
-            containerColor = SurfaceWhite,
-            title = {
-                Text("Chọn cụm chặng hiện tại", color = TextPrimary, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
-            },
-            text = {
-                LazyColumn {
-                    item {
-                        ListItem(
-                            headlineContent = { Text("Tự động theo GPS", color = EmeraldGreenText, fontWeight = FontWeight.SemiBold) },
-                            leadingContent = { Icon(Icons.Default.AutoMode, contentDescription = null, tint = EmeraldGreen) },
-                            colors = ListItemDefaults.colors(containerColor = SurfaceWhite),
-                            modifier = Modifier.clickable {
-                                viewModel.setManualZoneOverride(null)
-                                showZonePicker = false
-                            }
-                        )
-                        HorizontalDivider(color = BorderSubtle)
-                    }
-                    items(zones) { zone ->
-                        ListItem(
-                            headlineContent = { Text(zone.name, color = TextPrimary) },
-                            supportingContent = { Text("Độ cao ~${zone.elevationMeters}m", color = TextSecondary) },
-                            leadingContent = { Icon(Icons.Default.Place, contentDescription = null, tint = ElectricOrange) },
-                            colors = ListItemDefaults.colors(containerColor = SurfaceWhite),
-                            modifier = Modifier.clickable {
-                                viewModel.setManualZoneOverride(zone.id)
-                                showZonePicker = false
-                            }
-                        )
-                    }
+        // =====================================================================
+        // 3. KHAY CHỌN NGÀY TRƯỢT LÒ XO (SLIDING PILL DAY TABS)
+        // =====================================================================
+        item(key = "day_selector") {
+            val daysList = (1..config.durationDays).toList()
+            ShadcnSegmentedTabs(
+                items = daysList,
+                selectedItem = selectedDay.coerceIn(1, config.durationDays),
+                onItemSelected = {
+                    selectedDay = it
+                    highlightedPlaceId = null
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) { day, isSelected ->
+                Text(
+                    text = "Ngày $day",
+                    color = if (isSelected) TextPrimary else TextMuted,
+                    fontSize = 12.5.sp,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                )
+            }
+        }
+
+        // =====================================================================
+        // 4. BIỂU ĐỒ MẶT CẮT ĐỘ CAO ĐÈO ĐỘNG (ALLTRAILS ELEVATION PROFILE)
+        // =====================================================================
+        item(key = "elevation_profile_card") {
+            val dayRouteHint = when (selectedDay) {
+                1 -> "TP. Hà Giang (Km0) ➔ Bắc Sum ➔ Cổng Trời ➔ Yên Minh ➔ Đồng Văn (~145km)"
+                2 -> "Đồng Văn ➔ Cột Cờ Lũng Cú ➔ Lô Lô Chải ➔ Mã Pì Lèng ➔ Sông Nho Quế ➔ Pả Vi (~80km)"
+                3 -> "Mèo Vạc ➔ Cua Chữ M ➔ Mậu Duệ ➔ Thác Du Già ➔ Đường Thượng (~150km)"
+                else -> "Du Già ➔ Đường Thượng ➔ Thái An ➔ Về lại Cột mốc Km0 TP. Hà Giang"
+            }
+
+            ElevationProfileCard(
+                dayNumber = selectedDay,
+                dayPlaces = orderedDayPlaces,
+                routeSubtitle = dayRouteHint,
+                onPlaceSelected = { place ->
+                    highlightedPlaceId = place.id
                 }
-            },
-            confirmButton = {
-                ShadcnButton(
-                    onClick = { showZonePicker = false },
-                    variant = ShadcnButtonVariant.Ghost
-                ) {
-                    Text("Đóng", color = TextSecondary)
+            )
+        }
+
+        // =====================================================================
+        // 5. DÒNG THỜI GIAN HÀNH TRÌNH LIỀN MẠCH (POLARSTEPS TIMELINE)
+        // =====================================================================
+        listOf(TimeSlot.MORNING, TimeSlot.NOON, TimeSlot.AFTERNOON, TimeSlot.EVENING).forEach { slot ->
+            val slotsInThisTime = daySlots.filter { it.slot == slot }
+            val placesForSlot = slotsInThisTime.flatMap { item ->
+                item.suggestedPlaceIds.mapNotNull { pid -> placesById[pid]?.let { p -> item to p } }
+            }
+
+            item(key = "header_${selectedDay}_${slot.name}") {
+                TimeSlotHeader(slot = slot, count = placesForSlot.size)
+            }
+
+            if (placesForSlot.isEmpty()) {
+                item(key = "empty_${selectedDay}_${slot.name}") {
+                    Text(
+                        text = "Linh hoạt nghỉ ngơi trong ${slot.label.lowercase()}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextMuted,
+                        modifier = Modifier.padding(start = 28.dp, bottom = 4.dp)
+                    )
+                }
+            } else {
+                items(
+                    items = placesForSlot,
+                    key = { (slotItem, place) -> "day${selectedDay}_${slotItem.id}_${place.id}" }
+                ) { (slotItem, place) ->
+                    ItineraryPlaceCard(
+                        place = place,
+                        customNote = slotItem.title,
+                        isHighlighted = highlightedPlaceId == place.id,
+                        onNavigate = {
+                            LocationMath.openNavigationIntent(context, place.latitude, place.longitude, place.name)
+                        },
+                        onToggleVisited = { viewModel.toggleVisited(place.id) },
+                        onCall = {
+                            if (place.phoneNumber.isNotBlank()) {
+                                LocationMath.openDialerIntent(context, place.phoneNumber)
+                            }
+                        },
+                        modifier = Modifier.animateItem()
+                    )
                 }
             }
-        )
+        }
     }
 }
 
 @Composable
-fun TimeSlotHeader(slot: TimeSlot) {
+fun TimeSlotHeader(slot: TimeSlot, count: Int = 0) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 8.dp, bottom = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(top = 6.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        val (icon, color) = when (slot) {
-            TimeSlot.MORNING -> Icons.Default.WbTwilight to ElectricOrange
-            TimeSlot.NOON -> Icons.Default.WbSunny to AmberWarningText
-            TimeSlot.AFTERNOON -> Icons.Default.CloudQueue to SkyTelemetry
-            TimeSlot.EVENING -> Icons.Default.NightsStay to TextMuted
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            val (icon, color, softBg) = when (slot) {
+                TimeSlot.MORNING -> Triple(Icons.Default.WbTwilight, ElectricOrange, ElectricOrangeSoft)
+                TimeSlot.NOON -> Triple(Icons.Default.WbSunny, AmberWarningText, AmberWarningSoft)
+                TimeSlot.AFTERNOON -> Triple(Icons.Default.Terrain, SkyTelemetry, SkyTelemetrySoft)
+                TimeSlot.EVENING -> Triple(Icons.Default.NightsStay, TextSecondary, SurfaceMuted)
+            }
+            Box(
+                modifier = Modifier
+                    .size(26.dp)
+                    .clip(CircleShape)
+                    .background(softBg),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(14.dp))
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "${slot.label.uppercase()} • ${slot.timeRange}",
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                color = TextPrimary
+            )
         }
-        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(16.dp))
-        Spacer(modifier = Modifier.width(6.dp))
-        Text(
-            text = "${slot.label.uppercase()} (${slot.timeRange})",
-            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-            color = TextSecondary
-        )
+
+        if (count > 0) {
+            Text(
+                text = "$count chặng dừng",
+                style = MaterialTheme.typography.labelSmall,
+                color = TextMuted
+            )
+        }
     }
 }
 
@@ -492,89 +501,161 @@ fun TimeSlotHeader(slot: TimeSlot) {
 fun ItineraryPlaceCard(
     place: Place,
     customNote: String,
+    isHighlighted: Boolean = false,
     onNavigate: () -> Unit,
     onToggleVisited: () -> Unit,
-    onCall: () -> Unit
+    onCall: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    ShadcnCard(
-        modifier = Modifier
+    val checkScale by animateFloatAsState(
+        targetValue = if (place.isVisited) 1.15f else 1f,
+        animationSpec = spring(dampingRatio = 0.55f, stiffness = 500f),
+        label = "TimelineCheckBounce"
+    )
+    val railColor by animateColorAsState(
+        targetValue = if (place.isVisited) EmeraldGreen else BorderMedium,
+        animationSpec = tween(220),
+        label = "TimelineRailColor"
+    )
+
+    Row(
+        modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 3.dp),
-        shape = RoundedCornerShape(10.dp),
-        backgroundColor = if (place.isVisited) SurfaceMuted.copy(alpha = 0.5f) else SurfaceWhite,
-        borderColor = if (place.isVisited) BorderSubtle.copy(alpha = 0.6f) else BorderSubtle
+            .height(IntrinsicSize.Min)
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+        // Cột nối Timeline kiểu Polarsteps bên trái
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.width(26.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(2.dp)
+                    .height(14.dp)
+                    .background(railColor.copy(alpha = 0.5f))
+            )
+            Box(
+                modifier = Modifier
+                    .size(22.dp)
+                    .graphicsLayer {
+                        scaleX = checkScale
+                        scaleY = checkScale
+                    }
+                    .clip(CircleShape)
+                    .background(if (place.isVisited) EmeraldGreen else SurfaceWhite)
+                    .border(
+                        BorderStroke(2.dp, if (place.isVisited) EmeraldGreen else ElectricOrange),
+                        CircleShape
+                    )
+                    .springClickable(onClick = onToggleVisited),
+                contentAlignment = Alignment.Center
             ) {
-                IconButton(
-                    onClick = onToggleVisited,
-                    modifier = Modifier.size(26.dp)
-                ) {
+                if (place.isVisited) {
                     Icon(
-                        if (place.isVisited) Icons.Default.CheckCircle else Icons.Outlined.Circle,
-                        contentDescription = "Trạng thái",
-                        tint = if (place.isVisited) EmeraldGreen else BorderMedium,
-                        modifier = Modifier.size(18.dp)
+                        Icons.Default.Check,
+                        contentDescription = "Đã ghé",
+                        tint = Color.White,
+                        modifier = Modifier.size(13.dp)
+                    )
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .width(2.dp)
+                    .weight(1f)
+                    .background(railColor.copy(alpha = 0.5f))
+            )
+        }
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        // Thẻ chi tiết địa điểm
+        ShadcnCard(
+            modifier = Modifier
+                .weight(1f)
+                .padding(bottom = 6.dp),
+            shape = RoundedCornerShape(16.dp),
+            backgroundColor = if (place.isVisited) SurfaceMuted.copy(alpha = 0.6f) else SurfaceWhite,
+            borderColor = if (isHighlighted) ElectricOrange else if (place.isVisited) EmeraldGreenBorder else BorderSubtle,
+            borderWidth = if (isHighlighted) 1.5.dp else 1.dp
+        ) {
+            Column(modifier = Modifier.padding(13.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = place.name,
+                            style = MaterialTheme.typography.titleSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                textDecoration = if (place.isVisited) androidx.compose.ui.text.style.TextDecoration.LineThrough else null
+                            ),
+                            color = if (place.isVisited) TextMuted else TextPrimary
+                        )
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            ShadcnBadge(
+                                text = place.category.label,
+                                variant = ShadcnBadgeVariant.Orange
+                            )
+                            Text(
+                                text = "▲ ${place.altitudeMeters}m • ~${place.suggestedDurationMin}p",
+                                style = TelemetryTextStyle.copy(fontSize = 11.sp),
+                                color = TextMuted
+                            )
+                        }
+                    }
+
+                    if (place.phoneNumber.isNotBlank()) {
+                        IconButton(onClick = onCall, modifier = Modifier.size(34.dp)) {
+                            Icon(Icons.Default.Phone, contentDescription = "Gọi", tint = EmeraldGreenText, modifier = Modifier.size(17.dp))
+                        }
+                    }
+                }
+
+                if (place.addressHint.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "📍 ${place.addressHint}",
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                        color = TextPrimary
                     )
                 }
 
-                Spacer(modifier = Modifier.width(8.dp))
-
-                Column(modifier = Modifier.weight(1f)) {
+                if (place.practicalTip.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = place.name,
-                        style = MaterialTheme.typography.titleSmall.copy(
-                            fontWeight = FontWeight.SemiBold,
-                            textDecoration = if (place.isVisited) androidx.compose.ui.text.style.TextDecoration.LineThrough else null
-                        ),
-                        color = if (place.isVisited) TextMuted else TextPrimary
-                    )
-                    Text(
-                        text = "${place.category.label} • Khoảng ${place.suggestedDurationMin} phút",
+                        text = "💡 ${place.practicalTip}",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextSecondary
                     )
                 }
 
-                if (place.phoneNumber.isNotBlank()) {
-                    IconButton(onClick = onCall, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Default.Phone, contentDescription = "Gọi", tint = EmeraldGreenText, modifier = Modifier.size(16.dp))
-                    }
+                if (customNote.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "🧭 $customNote",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = ElectricOrangeHover
+                    )
                 }
-            }
 
-            if (place.practicalTip.isNotBlank()) {
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "💡 ${place.practicalTip}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary
-                )
-            }
+                Spacer(modifier = Modifier.height(10.dp))
 
-            if (customNote.isNotBlank()) {
-                Spacer(modifier = Modifier.height(3.dp))
-                Text(
-                    text = "📝 Ghi chú: $customNote",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = ElectricOrangeHover
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            ShadcnButton(
-                onClick = onNavigate,
-                variant = ShadcnButtonVariant.Primary,
-                modifier = Modifier.fillMaxWidth().height(36.dp),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
-            ) {
-                Icon(Icons.Default.Directions, contentDescription = null, modifier = Modifier.size(14.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Dẫn đường ngay", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                ShadcnButton(
+                    onClick = onNavigate,
+                    variant = ShadcnButtonVariant.Primary,
+                    modifier = Modifier.fillMaxWidth().height(37.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+                ) {
+                    Icon(Icons.Default.Directions, contentDescription = null, modifier = Modifier.size(15.dp))
+                    Spacer(modifier = Modifier.width(5.dp))
+                    Text("Dẫn đường Google Maps", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
             }
         }
     }
