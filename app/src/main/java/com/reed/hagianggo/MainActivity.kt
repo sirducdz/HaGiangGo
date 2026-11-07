@@ -266,7 +266,7 @@ class MainActivity : ComponentActivity() {
                     PlaceFormDialog(
                         initialPlace = editingPlace,
                         zones = zones,
-                        defaultZoneId = activeZone?.id ?: "dong_van",
+                        defaultZoneId = activeZone?.id ?: "tp_ha_giang",
                         onSave = { place -> viewModel.savePlace(place) },
                         onDelete = { id -> viewModel.deletePlace(id) },
                         onDismiss = { viewModel.closePlaceFormDialog() }

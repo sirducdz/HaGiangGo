@@ -46,8 +46,8 @@ object WhatNowEngine {
             allZones.firstOrNull()
         }
 
-        val refLat = currentLat ?: targetZone?.centerLat ?: 22.8233
-        val refLng = currentLng ?: targetZone?.centerLng ?: 104.9836
+        val refLat = currentLat ?: targetZone?.centerLat ?: 22.827330
+        val refLng = currentLng ?: targetZone?.centerLng ?: 104.984169
 
         // 1. Hard Filter
         val candidates = allPlaces.filter { place ->

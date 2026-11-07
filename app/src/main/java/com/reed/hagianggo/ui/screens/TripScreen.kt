@@ -57,6 +57,9 @@ fun TripScreen(
     val currencyFormatter = remember { NumberFormat.getNumberInstance(Locale("vi", "VN")) }
 
     // Lọc places theo zone đang chọn (hoặc tất cả nếu null)
+    val selectedZone = remember(zones, selectedZoneId) {
+        zones.firstOrNull { it.id == selectedZoneId }
+    }
     val displayedPlaces = remember(places, selectedZoneId) {
         if (selectedZoneId == null) places
         else places.filter { it.zoneId == selectedZoneId }
@@ -72,6 +75,7 @@ fun TripScreen(
                 places = displayedPlaces,
                 currentLat = currentLocation?.first,
                 currentLng = currentLocation?.second,
+                focusedZone = selectedZone,
                 trackPoints = liveRideState.recentPoints,
                 isMapFullscreen = true,
                 onToggleFullscreen = { isMapFullscreen = false },
@@ -133,7 +137,7 @@ fun TripScreen(
                                 )
                             }
 
-                            if (!showRealMap && selectedZoneId != null) {
+                            if (selectedZoneId != null) {
                                 TextButton(
                                     onClick = { selectedZoneId = null },
                                     contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
@@ -150,6 +154,7 @@ fun TripScreen(
                                 places = displayedPlaces,
                                 currentLat = currentLocation?.first,
                                 currentLng = currentLocation?.second,
+                                focusedZone = selectedZone,
                                 trackPoints = liveRideState.recentPoints,
                                 isMapFullscreen = false,
                                 onToggleFullscreen = { isMapFullscreen = true },
@@ -739,8 +744,17 @@ fun PlaceRowCard(
                 }
             }
 
-            if (place.practicalTip.isNotBlank()) {
+            if (place.addressHint.isNotBlank()) {
                 Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "📍 ${place.addressHint}",
+                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                    color = TextPrimary
+                )
+            }
+
+            if (place.practicalTip.isNotBlank()) {
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "💡 ${place.practicalTip}",
                     style = MaterialTheme.typography.bodySmall,

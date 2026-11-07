@@ -59,10 +59,10 @@ fun HaGiangLoopMap(
                     .fillMaxSize()
                     .pointerInput(sortedZones) {
                         detectTapGestures { tapOffset ->
-                            // Tìm zone gần nhất với điểm tap
+                            // Tìm zone gần nhất với điểm tap theo tọa độ địa lý chuẩn
                             val width = size.width.toFloat()
                             val height = size.height.toFloat()
-                            val coords = getNormalizedZoneCoords(width, height)
+                            val coords = getZoneCanvasCoords(sortedZones, width, height)
 
                             coords.entries.minByOrNull { (_, pt) ->
                                 (pt.x - tapOffset.x) * (pt.x - tapOffset.x) + (pt.y - tapOffset.y) * (pt.y - tapOffset.y)
@@ -74,7 +74,7 @@ fun HaGiangLoopMap(
             ) {
                 val width = size.width
                 val height = size.height
-                val coords = getNormalizedZoneCoords(width, height)
+                val coords = getZoneCanvasCoords(sortedZones, width, height)
 
                 // 1. Vẽ đường đèo nối các chặng (Loop cung tròn)
                 val path = Path()
@@ -164,8 +164,13 @@ fun HaGiangLoopMap(
                         )
                     )
 
-                    val textX = (pt.x - textLayout.size.width / 2).coerceIn(0f, width - textLayout.size.width)
-                    val textY = if (pt.y > height * 0.65f) pt.y - 20.dp.toPx() else pt.y + 12.dp.toPx()
+                    val (rawTextX, rawTextY) = when (zone.seq) {
+                        4, 5 -> (pt.x - textLayout.size.width / 2f) to (pt.y - 22.dp.toPx())
+                        6 -> (pt.x - textLayout.size.width - 12.dp.toPx()) to (pt.y - textLayout.size.height / 2f)
+                        else -> (pt.x - textLayout.size.width / 2f) to (pt.y + 11.dp.toPx())
+                    }
+                    val textX = rawTextX.coerceIn(0f, (width - textLayout.size.width).coerceAtLeast(0f))
+                    val textY = rawTextY.coerceIn(0f, (height - textLayout.size.height).coerceAtLeast(0f))
                     drawText(textLayout, topLeft = Offset(textX, textY))
                 }
             }
@@ -173,7 +178,7 @@ fun HaGiangLoopMap(
             // Legend / Chú thích nhỏ góc trên
             Row(
                 modifier = Modifier
-                    .align(Alignment.TopEnd)
+                    .align(Alignment.TopStart)
                     .background(
                         SurfaceWhite.copy(alpha = 0.95f),
                         RoundedCornerShape(6.dp)
@@ -190,7 +195,7 @@ fun HaGiangLoopMap(
                     modifier = Modifier.size(12.dp)
                 )
                 Text(
-                    text = "Vòng lặp 8 chặng",
+                    text = "Vòng lặp 8 chặng (GPS chuẩn)",
                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp, fontWeight = FontWeight.SemiBold),
                     color = TextPrimary
                 )
@@ -199,26 +204,30 @@ fun HaGiangLoopMap(
     }
 }
 
-private fun getNormalizedZoneCoords(width: Float, height: Float): Map<Int, Offset> {
-    // Tọa độ hình học mô phỏng bản đồ vòng cung Hà Giang
-    return mapOf(
-        1 to Offset(width * 0.16f, height * 0.82f), // 1. TP Hà Giang (Dưới cùng bên trái)
-        2 to Offset(width * 0.18f, height * 0.50f), // 2. Quản Bạ (Giữa bên trái)
-        3 to Offset(width * 0.38f, height * 0.35f), // 3. Yên Minh (Lưng đèo giữa)
-        4 to Offset(width * 0.58f, height * 0.22f), // 4. Sủng Là / Thẩm Mã (Cận bắc)
-        5 to Offset(width * 0.82f, height * 0.18f), // 5. Đồng Văn / Lũng Cú (Đỉnh đông bắc)
-        6 to Offset(width * 0.90f, height * 0.45f), // 6. Mã Pì Lèng (Vách đông)
-        7 to Offset(width * 0.80f, height * 0.70f), // 7. Mèo Vạc (Góc đông nam)
-        8 to Offset(width * 0.48f, height * 0.80f)  // 8. Mậu Duệ / Du Già (Về lại tây nam)
-    )
+private fun getZoneCanvasCoords(zones: List<Zone>, width: Float, height: Float): Map<Int, Offset> {
+    if (zones.isEmpty()) {
+        return mapOf(
+            1 to Offset(width * 0.14f, height * 0.85f),
+            2 to Offset(width * 0.16f, height * 0.50f),
+            3 to Offset(width * 0.43f, height * 0.42f),
+            4 to Offset(width * 0.53f, height * 0.26f),
+            5 to Offset(width * 0.81f, height * 0.18f),
+            6 to Offset(width * 0.90f, height * 0.24f),
+            7 to Offset(width * 0.89f, height * 0.36f),
+            8 to Offset(width * 0.56f, height * 0.72f)
+        )
+    }
+    return zones.associate { zone ->
+        zone.seq to projectGpsToCanvas(zone.centerLat, zone.centerLng, width, height)
+    }
 }
 
 private fun projectGpsToCanvas(lat: Double, lng: Double, width: Float, height: Float): Offset {
-    val minLat = 22.75
-    val maxLat = 23.40
-    val minLng = 104.85
-    val maxLng = 105.50
-    val xNorm = ((lng - minLng) / (maxLng - minLng)).coerceIn(0.05, 0.95).toFloat()
-    val yNorm = (1.0 - ((lat - minLat) / (maxLat - minLat))).coerceIn(0.05, 0.95).toFloat()
-    return Offset(width * (0.08f + xNorm * 0.84f), height * (0.08f + yNorm * 0.84f))
+    val minLat = 22.79
+    val maxLat = 23.35
+    val minLng = 104.93
+    val maxLng = 105.45
+    val xNorm = ((lng - minLng) / (maxLng - minLng)).coerceIn(0.0, 1.0).toFloat()
+    val yNorm = (1.0 - ((lat - minLat) / (maxLat - minLat))).coerceIn(0.0, 1.0).toFloat()
+    return Offset(width * (0.10f + xNorm * 0.80f), height * (0.12f + yNorm * 0.74f))
 }

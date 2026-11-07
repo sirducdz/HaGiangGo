@@ -195,15 +195,44 @@ val Place.longitude: Double get() = lng
 val Place.phoneNumber: String get() = phone
 val Place.isShelterInRain: Boolean get() = weatherFit == WeatherFit.RAIN_OK || category == PlaceCategory.CAFE_REST || category == PlaceCategory.EAT
 val Place.suggestedDurationMin: Int get() = durationMin
-val Place.altitudeMeters: Int get() = when (zoneId) {
-    "quan_ba" -> 1000
-    "dong_van" -> 1100
-    "lung_cu" -> 1470
-    "meo_vac" -> 1150
-    "du_gia" -> 450
-    "bac_me" -> 250
-    "yen_minh" -> 800
-    else -> 300
+val Place.altitudeMeters: Int get() = when (id) {
+    "pl_km0", "pl_fuel_tphg", "pl_eat_pho_tphg", "pl_sos_tphg" -> 120
+    "pl_cafe_nui_cam" -> 280
+    "pl_doc_bac_sum" -> 1100
+    "pl_cong_troi_quan_ba", "pl_cafe_cong_troi" -> 1500
+    "pl_nui_doi_quan_ba" -> 1120
+    "pl_fuel_tam_son" -> 1050
+    "pl_eat_trang_kim" -> 580
+    "pl_sos_quan_ba" -> 480
+    "pl_cay_nghien_co_don" -> 860
+    "pl_rung_thong_yen_minh" -> 1080
+    "pl_doc_tham_ma" -> 1320
+    "pl_fuel_pho_cao" -> 1410
+    "pl_nha_cua_pao", "pl_cafe_sung_la" -> 1450
+    "pl_pho_bang_co_tran" -> 1380
+    "pl_dinh_vua_meo", "pl_eat_sa_phin" -> 1420
+    "pl_cot_co_lung_cu" -> 1470
+    "pl_lo_lo_chai", "pl_cafe_cuc_bac" -> 1410
+    "pl_deo_ma_pi_leng" -> 1500
+    "pl_vach_da_trang" -> 1620
+    "pl_cafe_panorama" -> 1280
+    "pl_ben_thuyen_ta_lang" -> 380
+    "pl_lang_pa_vi" -> 980
+    "pl_cua_chu_m" -> 1120
+    "pl_nga_ba_mau_due" -> 760
+    "pl_thac_du_gia" -> 620
+    "pl_sos_du_gia" -> 950
+    else -> when (zoneId) {
+        "tp_ha_giang" -> 120
+        "quan_ba" -> 1050
+        "yen_minh" -> 650
+        "sung_la_pho_bang" -> 1420
+        "dong_van_lung_cu" -> 1050
+        "ma_pi_leng_nho_que" -> 1450
+        "meo_vac" -> 1000
+        "mau_due_du_gia" -> 580
+        else -> 500
+    }
 }
 
 val PlaceCategory.label: String get() = title
@@ -223,14 +252,15 @@ fun TripConfig.withDurationDays(days: Int): TripConfig {
 }
 
 val Zone.elevationMeters: Int get() = when (id) {
-    "quan_ba" -> 1000
-    "dong_van" -> 1100
-    "lung_cu" -> 1470
-    "meo_vac" -> 1150
-    "du_gia" -> 450
-    "bac_me" -> 250
-    "yen_minh" -> 800
-    else -> 300
+    "tp_ha_giang" -> 120
+    "quan_ba" -> 1050
+    "yen_minh" -> 650
+    "sung_la_pho_bang" -> 1420
+    "dong_van_lung_cu" -> 1050
+    "ma_pi_leng_nho_que" -> 1500
+    "meo_vac" -> 1000
+    "mau_due_du_gia" -> 580
+    else -> 500
 }
 
 data class RidePoint(

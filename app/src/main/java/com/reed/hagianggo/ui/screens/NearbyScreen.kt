@@ -47,9 +47,9 @@ fun NearbyScreen(
     var selectedCategoryFilter by remember { mutableStateOf<PlaceCategory?>(null) }
     var filterRainShelterOnly by remember { mutableStateOf(false) }
 
-    // Tọa độ tham chiếu để tính cự ly: ưu tiên GPS thực, fallback về tâm Zone hiện tại, fallback về TP. Hà Giang
-    val refLat = currentLocation?.first ?: activeZone?.centerLat ?: 22.8233
-    val refLng = currentLocation?.second ?: activeZone?.centerLng ?: 104.9839
+    // Tọa độ tham chiếu để tính cự ly: ưu tiên GPS thực, fallback về tâm Zone hiện tại, fallback về Cột mốc Km0 TP. Hà Giang
+    val refLat = currentLocation?.first ?: activeZone?.centerLat ?: 22.827330
+    val refLng = currentLocation?.second ?: activeZone?.centerLng ?: 104.984169
 
     // Danh sách kèm cự ly tính toán
     val placesWithDistance = remember(places, refLat, refLng, tripConfig.vehicle, searchQuery, selectedCategoryFilter, filterRainShelterOnly) {
@@ -61,9 +61,10 @@ fun NearbyScreen(
                 if (searchQuery.isNotBlank()) {
                     val q = searchQuery.trim().lowercase()
                     val matchName = place.name.lowercase().contains(q)
+                    val matchHint = place.addressHint.lowercase().contains(q)
                     val matchTip = place.practicalTip.lowercase().contains(q)
                     val matchCat = place.category.label.lowercase().contains(q)
-                    if (!matchName && !matchTip && !matchCat) return@filter false
+                    if (!matchName && !matchHint && !matchTip && !matchCat) return@filter false
                 }
                 true
             }
@@ -377,8 +378,17 @@ fun NearbyPlaceCard(
                 }
             }
 
-            if (place.practicalTip.isNotBlank()) {
+            if (place.addressHint.isNotBlank()) {
                 Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "📍 ${place.addressHint}",
+                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                    color = TextPrimary
+                )
+            }
+
+            if (place.practicalTip.isNotBlank()) {
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "💡 ${place.practicalTip}",
                     style = MaterialTheme.typography.bodySmall,

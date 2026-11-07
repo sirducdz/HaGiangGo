@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import com.reed.hagianggo.model.VehicleType
 import com.reed.hagianggo.model.Zone
+import java.util.Locale
 import kotlin.math.*
 
 object LocationMath {
@@ -53,22 +54,34 @@ object LocationMath {
     }
 
     fun openNavigationIntent(context: Context, lat: Double, lng: Double, label: String = "Điểm đến") {
+        val latStr = String.format(Locale.US, "%.6f", lat)
+        val lngStr = String.format(Locale.US, "%.6f", lng)
+        val encodedLabel = Uri.encode(label)
+        val geoUri = Uri.parse("geo:$latStr,$lngStr?q=$latStr,$lngStr($encodedLabel)")
+
         try {
-            val encodedLabel = Uri.encode(label)
-            val uri = Uri.parse("geo:$lat,$lng?q=$lat,$lng($encodedLabel)")
-            val intent = Intent(Intent.ACTION_VIEW, uri).apply {
+            // Ưu tiên mở trực tiếp Google Maps tới đúng tọa độ chuẩn 6 chữ số thập phân
+            val gmapsIntent = Intent(Intent.ACTION_VIEW, geoUri).apply {
+                setPackage("com.google.android.apps.maps")
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
             }
-            context.startActivity(intent)
+            context.startActivity(gmapsIntent)
         } catch (_: Exception) {
             try {
-                val browserUri = Uri.parse("https://www.google.com/maps/search/?api=1&query=$lat,$lng")
-                val browserIntent = Intent(Intent.ACTION_VIEW, browserUri).apply {
+                val genericIntent = Intent(Intent.ACTION_VIEW, geoUri).apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK
                 }
-                context.startActivity(browserIntent)
+                context.startActivity(genericIntent)
             } catch (_: Exception) {
-                // Ignore if no browser
+                try {
+                    val browserUri = Uri.parse("https://www.google.com/maps/dir/?api=1&destination=$latStr,$lngStr")
+                    val browserIntent = Intent(Intent.ACTION_VIEW, browserUri).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    context.startActivity(browserIntent)
+                } catch (_: Exception) {
+                    // Ignore if no browser
+                }
             }
         }
     }

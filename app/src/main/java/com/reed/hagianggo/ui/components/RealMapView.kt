@@ -38,6 +38,8 @@ import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
 import java.io.File
+import java.util.Locale
+import kotlin.math.ln
 
 // MapView ngăn không cho Container cha (LazyColumn) cuộn cướp thao tác khi người dùng đang lướt bản đồ
 class TouchableMapView(context: Context) : MapView(context) {
@@ -54,15 +56,86 @@ class TouchableMapView(context: Context) : MapView(context) {
     }
 }
 
+private val LOOP_OVERVIEW_CENTER = GeoPoint(23.0950, 105.1900)
+private const val LOOP_OVERVIEW_ZOOM = 9.45
+
+// Hành lang tuyến đường thực tế Hà Giang Loop (QL4C -> ĐT176 -> Du Già -> Đường Thượng -> Km0)
+private val HA_GIANG_LOOP_WAYPOINTS = listOf(
+    GeoPoint(22.827330, 104.984169), // Km0 TP. Hà Giang
+    GeoPoint(22.841302, 104.995193), // Cửa ngõ QL4C
+    GeoPoint(22.988169, 104.935900), // Dốc Bắc Sum
+    GeoPoint(23.049316, 104.993021), // Cổng Trời Quản Bạ
+    GeoPoint(23.059509, 104.996916), // Núi Đôi Quản Bạ
+    GeoPoint(23.064631, 105.004454), // TT. Tam Sơn
+    GeoPoint(23.069913, 105.034891), // Phở Tráng Kìm
+    GeoPoint(23.083986, 105.037507), // Cầu Cán Tỷ
+    GeoPoint(23.104330, 105.038522), // Cây Nghiến Cô Đơn
+    GeoPoint(23.121011, 105.109948), // Rừng Thông Yên Minh
+    GeoPoint(23.118139, 105.145654), // TT. Yên Minh
+    GeoPoint(23.168925, 105.194145), // Dốc Thẩm Mã
+    GeoPoint(23.181364, 105.198267), // Phố Cáo
+    GeoPoint(23.227137, 105.202360), // Sủng Là - Nhà của Pao
+    GeoPoint(23.256248, 105.262089), // Dinh Vua Mèo Sà Phìn
+    GeoPoint(23.363461, 105.316334), // Cột Cờ Quốc gia Lũng Cú
+    GeoPoint(23.279671, 105.360784), // Phố Cổ Đồng Văn
+    GeoPoint(23.240621, 105.412083), // Đỉnh Đèo Mã Pì Lèng
+    GeoPoint(23.206305, 105.416669), // Làng Pả Vi
+    GeoPoint(23.164376, 105.408771), // TT. Mèo Vạc
+    GeoPoint(23.104663, 105.260078), // Cua Chữ M
+    GeoPoint(23.065592, 105.237738), // Ngã Ba Mậu Duệ
+    GeoPoint(22.933029, 105.226014), // Xã Du Già
+    GeoPoint(22.979511, 105.185435), // Đèo Đường Thượng
+    GeoPoint(23.049316, 104.993021), // Cổng Trời / Thuận Hòa
+    GeoPoint(22.827330, 104.984169)  // Về lại Km0 TP. Hà Giang
+)
+
 // Bộ nhớ đệm Icon Marker để tránh tạo lại Bitmap gây giật lag
 private val markerDrawableCache = HashMap<String, BitmapDrawable>()
 private var myLocationDrawableCache: BitmapDrawable? = null
+
+private fun placesOverlayKey(places: List<Place>): String =
+    places.joinToString(";") { "${it.id}:${it.lat}:${it.lng}:${it.name}:${it.category.code}" }
+
+private fun markerCacheKey(place: Place): String =
+    "${place.id}|${place.name}|${place.category.code}"
+
+private fun computeFocusCamera(
+    focusedZone: Zone?,
+    places: List<Place>,
+    isMapFullscreen: Boolean = false
+): Pair<GeoPoint, Double> {
+    val fullscreenBoost = if (isMapFullscreen) 0.85 else 0.0
+    if (focusedZone == null) {
+        return LOOP_OVERVIEW_CENTER to (LOOP_OVERVIEW_ZOOM + fullscreenBoost * 0.6)
+    }
+    if (places.isEmpty()) {
+        return GeoPoint(focusedZone.centerLat, focusedZone.centerLng) to (13.2 + fullscreenBoost)
+    }
+    val minLat = places.minOf { it.lat }
+    val maxLat = places.maxOf { it.lat }
+    val minLng = places.minOf { it.lng }
+    val maxLng = places.maxOf { it.lng }
+    // Nhích tâm lên nhẹ (+6% span) để chừa khoảng trống cho nhãn tên ghim phía trên đỉnh mũi tên
+    val latSpan = (maxLat - minLat).coerceAtLeast(0.012)
+    val lngSpan = (maxLng - minLng).coerceAtLeast(0.015)
+    val midLat = (minLat + maxLat) / 2.0 + latSpan * 0.06
+    val midLng = (minLng + maxLng) / 2.0
+
+    // Trên khung 350dp (zoom 10.0 hiển thị ~0.41 độ vĩ, ~0.44 độ kinh), chừa biên an toàn 1.55x
+    val paddedLat = latSpan * 1.55
+    val paddedLng = lngSpan * 1.65
+    val zoomLat = 10.0 + (ln(0.41 / paddedLat) / ln(2.0))
+    val zoomLng = 10.0 + (ln(0.44 / paddedLng) / ln(2.0))
+    val zoom = (minOf(zoomLat, zoomLng) + fullscreenBoost).coerceIn(9.4, 15.0)
+    return GeoPoint(midLat, midLng) to zoom
+}
 
 @Composable
 fun RealMapView(
     places: List<Place>,
     currentLat: Double?,
     currentLng: Double?,
+    focusedZone: Zone? = null,
     trackPoints: List<Pair<Double, Double>> = emptyList(),
     isMapFullscreen: Boolean = false,
     onToggleFullscreen: (() -> Unit)? = null,
@@ -72,11 +145,31 @@ fun RealMapView(
     var selectedPlace by remember { mutableStateOf<Place?>(null) }
     var isTopoMode by remember { mutableStateOf(false) }
     var mapViewInstance by remember { mutableStateOf<MapView?>(null) }
+    var hasMounted by remember { mutableStateOf(false) }
 
-    // Biến ghi nhớ danh sách places đã add vào overlays để tránh xóa tạo lại liên tục
+    // Biến ghi nhớ danh sách places đã add vào overlays (gồm cả lat/lng) để tự động cập nhật ghim khi đổi tọa độ
     var lastPlacesKey by remember { mutableStateOf("") }
+    var loopRouteRef by remember { mutableStateOf<Polyline?>(null) }
     var myLocationMarkerRef by remember { mutableStateOf<Marker?>(null) }
     var polylineRef by remember { mutableStateOf<Polyline?>(null) }
+
+    // Tự đóng thẻ chi tiết nếu địa điểm đang chọn không nằm trong vùng lọc hiện tại
+    LaunchedEffect(places) {
+        val sel = selectedPlace
+        if (sel != null) {
+            selectedPlace = places.firstOrNull { it.id == sel.id }
+        }
+    }
+
+    // Tự động di chuyển & căn khung bản đồ mượt mà khi người dùng lọc theo Chặng (Zone)
+    LaunchedEffect(focusedZone?.id) {
+        if (!hasMounted) {
+            hasMounted = true
+            return@LaunchedEffect
+        }
+        val (targetCenter, targetZoom) = computeFocusCamera(focusedZone, places, isMapFullscreen)
+        mapViewInstance?.controller?.animateTo(targetCenter, targetZoom, 650L)
+    }
 
     // Cấu hình OSMDroid tối ưu hiệu năng
     LaunchedEffect(Unit) {
@@ -112,30 +205,49 @@ fun RealMapView(
 
                     minZoomLevel = 8.0
                     maxZoomLevel = 19.0
-                    controller.setZoom(10.8)
-                    controller.setCenter(GeoPoint(23.16, 105.20)) // Trung tâm vòng cung Hà Giang
+                    val (initialCenter, initialZoom) = computeFocusCamera(focusedZone, places, isMapFullscreen)
+                    controller.setZoom(initialZoom)
+                    controller.setCenter(initialCenter)
 
                     // Khởi tạo overlays lần đầu
-                    val currentKey = places.joinToString(",") { it.id }
+                    val currentKey = placesOverlayKey(places)
                     lastPlacesKey = currentKey
 
                     overlays.clear()
+
+                    // 0. Đường dẫn vòng cung Hà Giang Loop (nằm dưới các ghim địa điểm)
+                    val loopLine = Polyline().apply {
+                        infoWindow = null
+                        outlinePaint.color = android.graphics.Color.argb(120, 234, 88, 12) // ElectricOrange mờ thanh lịch
+                        outlinePaint.strokeWidth = 5.5f
+                        outlinePaint.style = Paint.Style.STROKE
+                        outlinePaint.strokeCap = Paint.Cap.ROUND
+                        outlinePaint.strokeJoin = Paint.Join.ROUND
+                        outlinePaint.pathEffect = DashPathEffect(floatArrayOf(16f, 10f), 0f)
+                        setPoints(HA_GIANG_LOOP_WAYPOINTS)
+                        setOnClickListener { _, _, _ -> false }
+                    }
+                    loopRouteRef = loopLine
+                    overlays.add(loopLine)
 
                     // 1. Thêm các place marker có gắn tên trực tiếp
                     places.forEach { place ->
                         val marker = createOrGetPlaceMarker(this, ctx, place) { p ->
                             selectedPlace = p
+                            controller.animateTo(GeoPoint(p.lat, p.lng))
                         }
                         overlays.add(marker)
                     }
 
-                    // 2. Thêm Polyline vệt đường
+                    // 2. Thêm Polyline vệt đường Live GPS
                     val polyline = Polyline().apply {
+                        infoWindow = null
                         outlinePaint.color = android.graphics.Color.parseColor("#EA580C")
                         outlinePaint.strokeWidth = 9f
                         if (trackPoints.size >= 2) {
                             setPoints(trackPoints.map { GeoPoint(it.first, it.second) })
                         }
+                        setOnClickListener { _, _, _ -> false }
                     }
                     polylineRef = polyline
                     overlays.add(polyline)
@@ -165,22 +277,23 @@ fun RealMapView(
                     mapView.setTileSource(currentTileSource)
                 }
 
-                // Cập nhật danh sách place markers CHỈ KHI danh sách thực sự thay đổi
-                val currentKey = places.joinToString(",") { it.id }
+                // Cập nhật danh sách place markers khi danh sách hoặc tọa độ thay đổi
+                val currentKey = placesOverlayKey(places)
                 if (currentKey != lastPlacesKey) {
                     lastPlacesKey = currentKey
 
-                    // Lọc giữ lại myLocationMarker và polyline, chỉ rebuild place markers
-                    val nonPlaceOverlays = mapView.overlays.filter { it == myLocationMarkerRef || it == polylineRef }
                     mapView.overlays.clear()
+                    loopRouteRef?.let { mapView.overlays.add(it) }
 
                     places.forEach { place ->
                         val marker = createOrGetPlaceMarker(mapView, context, place) { p ->
                             selectedPlace = p
+                            mapView.controller.animateTo(GeoPoint(p.lat, p.lng))
                         }
                         mapView.overlays.add(marker)
                     }
-                    mapView.overlays.addAll(nonPlaceOverlays)
+                    polylineRef?.let { mapView.overlays.add(it) }
+                    myLocationMarkerRef?.let { mapView.overlays.add(it) }
                     mapView.invalidate()
                 }
 
@@ -240,7 +353,7 @@ fun RealMapView(
                     .background(SurfaceWhite)
                     .border(BorderStroke(1.dp, BorderSubtle), CircleShape)
                     .clickable {
-                        mapViewInstance?.controller?.animateTo(GeoPoint(23.16, 105.20), 10.8, 800L)
+                        mapViewInstance?.controller?.animateTo(LOOP_OVERVIEW_CENTER, LOOP_OVERVIEW_ZOOM, 800L)
                     },
                 contentAlignment = Alignment.Center
             ) {
@@ -331,6 +444,11 @@ fun RealMapView(
                                             color = TextMuted
                                         )
                                     }
+                                    Text(
+                                        text = "• ${String.format(Locale.US, "%.5f, %.5f", place.lat, place.lng)}",
+                                        style = TelemetryTextStyle.copy(fontSize = 11.sp),
+                                        color = TextMuted
+                                    )
                                 }
                             }
                             IconButton(
@@ -341,8 +459,17 @@ fun RealMapView(
                             }
                         }
 
-                        if (place.practicalTip.isNotBlank()) {
+                        if (place.addressHint.isNotBlank()) {
                             Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "📍 ${place.addressHint}",
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                                color = TextPrimary
+                            )
+                        }
+
+                        if (place.practicalTip.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = "💡 ${place.practicalTip}",
                                 style = MaterialTheme.typography.bodySmall,
@@ -395,10 +522,11 @@ private fun createOrGetPlaceMarker(
     place: Place,
     onPlaceClick: (Place) -> Unit
 ): Marker {
-    val cachedDrawable = markerDrawableCache[place.id] ?: run {
+    val cacheKey = markerCacheKey(place)
+    val cachedDrawable = markerDrawableCache[cacheKey] ?: run {
         val bitmap = createLabeledPinBitmap(place)
         val drawable = BitmapDrawable(context.resources, bitmap)
-        markerDrawableCache[place.id] = drawable
+        markerDrawableCache[cacheKey] = drawable
         drawable
     }
 

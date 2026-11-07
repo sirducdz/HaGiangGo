@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.reed.hagianggo.model.*
 import com.reed.hagianggo.ui.theme.*
+import java.util.Locale
 import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -28,11 +29,23 @@ fun PlaceFormDialog(
     onDelete: ((String) -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
+    val defaultZone = zones.firstOrNull { it.id == (initialPlace?.zoneId ?: defaultZoneId) } ?: zones.firstOrNull()
     var name by remember { mutableStateOf(initialPlace?.name ?: "") }
-    var zoneId by remember { mutableStateOf(initialPlace?.zoneId ?: defaultZoneId) }
+    var zoneId by remember { mutableStateOf(initialPlace?.zoneId ?: defaultZone?.id ?: defaultZoneId) }
     var category by remember { mutableStateOf(initialPlace?.category ?: PlaceCategory.CHECKIN_VIEW) }
-    var latText by remember { mutableStateOf(initialPlace?.lat?.toString() ?: "23.2795") }
-    var lngText by remember { mutableStateOf(initialPlace?.lng?.toString() ?: "105.3629") }
+    var latText by remember {
+        mutableStateOf(
+            initialPlace?.let { String.format(Locale.US, "%.6f", it.lat) }
+                ?: String.format(Locale.US, "%.6f", defaultZone?.centerLat ?: 22.827330)
+        )
+    }
+    var lngText by remember {
+        mutableStateOf(
+            initialPlace?.let { String.format(Locale.US, "%.6f", it.lng) }
+                ?: String.format(Locale.US, "%.6f", defaultZone?.centerLng ?: 104.984169)
+        )
+    }
+    var hasCustomCoords by remember { mutableStateOf(initialPlace != null) }
     var phone by remember { mutableStateOf(initialPlace?.phone ?: "") }
     var addressHint by remember { mutableStateOf(initialPlace?.addressHint ?: "") }
     var practicalTip by remember { mutableStateOf(initialPlace?.practicalTip ?: "") }
@@ -103,6 +116,10 @@ fun PlaceFormDialog(
                                 text = { Text("${z.seq}. ${z.name}") },
                                 onClick = {
                                     zoneId = z.id
+                                    if (!hasCustomCoords) {
+                                        latText = String.format(Locale.US, "%.6f", z.centerLat)
+                                        lngText = String.format(Locale.US, "%.6f", z.centerLng)
+                                    }
                                     zoneExpanded = false
                                 }
                             )
@@ -148,6 +165,7 @@ fun PlaceFormDialog(
                     OutlinedTextField(
                         value = latText,
                         onValueChange = { input ->
+                            hasCustomCoords = true
                             if (input.contains(",")) {
                                 val parts = input.split(",")
                                 latText = parts.getOrNull(0)?.trim() ?: ""
@@ -162,7 +180,10 @@ fun PlaceFormDialog(
                     )
                     OutlinedTextField(
                         value = lngText,
-                        onValueChange = { lngText = it },
+                        onValueChange = {
+                            hasCustomCoords = true
+                            lngText = it
+                        },
                         label = { Text("Kinh độ (Lng)") },
                         colors = textFieldColors,
                         modifier = Modifier.weight(1f)
@@ -213,8 +234,9 @@ fun PlaceFormDialog(
         confirmButton = {
             ShadcnButton(
                 onClick = {
-                    val latVal = latText.toDoubleOrNull() ?: 23.2795
-                    val lngVal = lngText.toDoubleOrNull() ?: 105.3629
+                    val selectedZone = zones.firstOrNull { it.id == zoneId }
+                    val latVal = latText.toDoubleOrNull() ?: selectedZone?.centerLat ?: 22.827330
+                    val lngVal = lngText.toDoubleOrNull() ?: selectedZone?.centerLng ?: 104.984169
                     val placeId = initialPlace?.id ?: "custom_${UUID.randomUUID().toString().take(8)}"
                     onSave(
                         Place(

@@ -12,7 +12,7 @@ class HaGiangDatabase(private val context: Context) :
 
     companion object {
         const val DATABASE_NAME = "hagiang_go.db"
-        const val DATABASE_VERSION = 2
+        const val DATABASE_VERSION = 3
 
         @Volatile
         private var INSTANCE: HaGiangDatabase? = null
@@ -208,10 +208,9 @@ class HaGiangDatabase(private val context: Context) :
     fun seedIfEmpty() {
         val db = writableDatabase
         val cursor = db.rawQuery("SELECT COUNT(*) FROM zones", null)
-        val count = if (cursor.moveToFirst()) cursor.getInt(0) else 0
+        val existingZoneCount = if (cursor.moveToFirst()) cursor.getInt(0) else 0
         cursor.close()
-
-        if (count > 0) return
+        val isFirstSeed = existingZoneCount == 0
 
         try {
             val jsonString = context.assets.open("hagiang_seed.json").bufferedReader().use { it.readText() }
@@ -219,7 +218,7 @@ class HaGiangDatabase(private val context: Context) :
 
             db.beginTransaction()
             try {
-                // 1. Zones
+                // 1. Luôn đồng bộ tọa độ chuẩn xác của 8 Zones
                 val zonesArray = root.optJSONArray("zones")
                 if (zonesArray != null) {
                     for (i in 0 until zonesArray.length()) {
@@ -236,11 +235,12 @@ class HaGiangDatabase(private val context: Context) :
                     }
                 }
 
-                // 2. Places
+                // 2. Đồng bộ tọa độ GPS chính xác cho tất cả Places gốc (bảo toàn bookmark, đã ghé, ghi chú của người dùng)
                 val placesArray = root.optJSONArray("places")
                 if (placesArray != null) {
                     for (i in 0 until placesArray.length()) {
                         val obj = placesArray.getJSONObject(i)
+                        val placeId = obj.getString("id")
                         val slotsArray = obj.optJSONArray("timeSlots")
                         val slots = mutableListOf<String>()
                         if (slotsArray != null) {
@@ -248,8 +248,7 @@ class HaGiangDatabase(private val context: Context) :
                                 slots.add(slotsArray.getString(s))
                             }
                         }
-                        val cv = ContentValues().apply {
-                            put("id", obj.getString("id"))
+                        val coreValues = ContentValues().apply {
                             put("name", obj.getString("name"))
                             put("zone_id", obj.getString("zoneId"))
                             put("category", obj.getString("category"))
@@ -263,17 +262,25 @@ class HaGiangDatabase(private val context: Context) :
                             put("car_friendly", if (obj.optBoolean("carFriendly", true)) 1 else 0)
                             put("price_est", obj.optString("priceEst", ""))
                             put("practical_tip", obj.optString("practicalTip", ""))
-                            put("is_bookmarked", 0)
-                            put("is_visited", 0)
-                            put("user_note", "")
                         }
-                        db.insertWithOnConflict("places", null, cv, SQLiteDatabase.CONFLICT_REPLACE)
+
+                        val updatedRows = db.update("places", coreValues, "id = ?", arrayOf(placeId))
+                        if (updatedRows == 0) {
+                            coreValues.apply {
+                                put("id", placeId)
+                                put("is_bookmarked", 0)
+                                put("is_visited", 0)
+                                put("user_note", "")
+                            }
+                            db.insertWithOnConflict("places", null, coreValues, SQLiteDatabase.CONFLICT_REPLACE)
+                        }
                     }
                 }
 
-                // 3. Itineraries
+                // 3. Đồng bộ lịch trình chuẩn (Itineraries) để bao gồm các mốc mới chính xác
                 val itinerariesArray = root.optJSONArray("default_itineraries")
                 if (itinerariesArray != null) {
+                    db.delete("itinerary_slots", null, null)
                     for (i in 0 until itinerariesArray.length()) {
                         val obj = itinerariesArray.getJSONObject(i)
                         val placeIdsArray = obj.optJSONArray("suggestedPlaceIds")
@@ -294,17 +301,19 @@ class HaGiangDatabase(private val context: Context) :
                     }
                 }
 
-                // 4. Checklist
-                val checklistArray = root.optJSONArray("checklist_seed")
-                if (checklistArray != null) {
-                    for (i in 0 until checklistArray.length()) {
-                        val obj = checklistArray.getJSONObject(i)
-                        val cv = ContentValues().apply {
-                            put("group_name", obj.getString("group"))
-                            put("title", obj.getString("title"))
-                            put("is_checked", 0)
+                // 4. Checklist chỉ tạo lần đầu để giữ trạng thái tick đồ của người dùng
+                if (isFirstSeed) {
+                    val checklistArray = root.optJSONArray("checklist_seed")
+                    if (checklistArray != null) {
+                        for (i in 0 until checklistArray.length()) {
+                            val obj = checklistArray.getJSONObject(i)
+                            val cv = ContentValues().apply {
+                                put("group_name", obj.getString("group"))
+                                put("title", obj.getString("title"))
+                                put("is_checked", 0)
+                            }
+                            db.insert("checklist_items", null, cv)
                         }
-                        db.insert("checklist_items", null, cv)
                     }
                 }
 
