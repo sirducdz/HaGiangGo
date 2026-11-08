@@ -349,6 +349,7 @@ class MainActivity : ComponentActivity() {
                         status = offlineMapStatus,
                         onStartDownload = { viewModel.startOfflineMapDownload() },
                         onCancelDownload = { viewModel.cancelOfflineMapDownload() },
+                        onPreviewOfflineLayer = { viewModel.previewOfflineTopoLayer() },
                         onDismiss = { viewModel.closeOfflineMapDialog() }
                     )
                 }

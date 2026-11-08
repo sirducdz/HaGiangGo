@@ -14,6 +14,7 @@ import com.reed.hagianggo.domain.SplitbillEngine
 import com.reed.hagianggo.domain.WhatNowEngine
 import com.reed.hagianggo.model.*
 import com.reed.hagianggo.service.RideTrackerService
+import com.reed.hagianggo.ui.components.MapLayerStyle
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -73,6 +74,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _isOfflineMapDialogOpen = MutableStateFlow(false)
     val isOfflineMapDialogOpen: StateFlow<Boolean> = _isOfflineMapDialogOpen.asStateFlow()
+
+    private val _preferredMapLayer = MutableStateFlow<MapLayerStyle?>(null)
+    val preferredMapLayer: StateFlow<MapLayerStyle?> = _preferredMapLayer.asStateFlow()
 
     // Cụm chặng hiện tại (tính từ override tay hoặc chip GPS)
     val activeZone: StateFlow<Zone?> = combine(
@@ -527,6 +531,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun cancelOfflineMapDownload() {
         offlineMapManager.cancelDownload()
+    }
+
+    fun setPreferredMapLayer(style: MapLayerStyle?) {
+        _preferredMapLayer.value = style
+    }
+
+    fun previewOfflineTopoLayer() {
+        _preferredMapLayer.value = MapLayerStyle.OFFLINE_TOPO
+        _isOfflineMapDialogOpen.value = false
+        _selectedTab.value = 0
+        showNotification("🗺️ Đang xem Lớp Bản đồ Địa hình Offline (filesDir)")
     }
 
     fun markTankRefueled() {

@@ -26,6 +26,7 @@ fun OfflineMapPackDialog(
     status: OfflineMapStatus,
     onStartDownload: () -> Unit,
     onCancelDownload: () -> Unit,
+    onPreviewOfflineLayer: (() -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val progress = if (status.totalTiles > 0) {
@@ -76,7 +77,7 @@ fun OfflineMapPackDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    text = "Tải trước toàn bộ cung đường Hà Giang Loop (TP. Hà Giang – Quản Bạ – Yên Minh – Đồng Văn – Lũng Cú – Mã Pì Lèng – Mèo Vạc – Du Già, mức phóng Zoom 9–15). Dữ liệu được giữ vĩnh viễn trong bộ nhớ riêng, không bị trình dọn rác xóa.",
+                    text = "Dựng & lưu vĩnh viễn gói Bản đồ Địa hình Offline Hà Giang (Zoom 8–15, gồm 5.350 điểm uốn đèo QL4C/ĐT176/QL34, sông Nho Quế/Miện/Lô & đường đồng mức) trực tiếp vào filesDir. Không phụ thuộc máy chủ ngoài, không bao giờ bị chặn 403, đồng thời giữ lại vĩnh viễn mọi vùng bản đồ chuẩn bạn đã xem.",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary
                 )
@@ -101,8 +102,8 @@ fun OfflineMapPackDialog(
                         ) {
                             ShadcnBadge(
                                 text = if (status.isReadyOffline) "✓ ĐÃ SẴN SÀNG OFFLINE"
-                                else if (status.isDownloading) "ĐANG TẢI VỀ MÁY..."
-                                else "CHƯA TẢI TRỌN GÓI",
+                                else if (status.isDownloading) "ĐANG DỰNG VÀO MÁY..."
+                                else "CHƯA LƯU TRỌN GÓI",
                                 variant = if (status.isReadyOffline) ShadcnBadgeVariant.Emerald
                                 else if (status.isDownloading) ShadcnBadgeVariant.Orange
                                 else ShadcnBadgeVariant.Default
@@ -142,11 +143,23 @@ fun OfflineMapPackDialog(
 
                 if (!status.errorMessage.isNullOrBlank()) {
                     ShadcnAlert(
-                        title = "Lưu ý kết nối",
+                        title = "Lưu ý bộ nhớ",
                         description = status.errorMessage,
                         variant = ShadcnBadgeVariant.Amber,
                         icon = Icons.Default.WifiOff
                     )
+                }
+
+                if (status.isReadyOffline && onPreviewOfflineLayer != null) {
+                    ShadcnButton(
+                        onClick = onPreviewOfflineLayer,
+                        variant = ShadcnButtonVariant.Secondary,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Layers, contentDescription = null, tint = EmeraldGreenText, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Xem ngay Lớp Bản đồ Địa hình Offline", color = EmeraldGreenText, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         },
@@ -172,7 +185,7 @@ fun OfflineMapPackDialog(
                     )
                     Spacer(modifier = Modifier.width(5.dp))
                     Text(
-                        text = if (status.isReadyOffline) "Cập nhật mảnh thiếu" else "Tải gói Hà Giang (~24 MB)",
+                        text = if (status.isReadyOffline) "Kiểm tra mảnh thiếu" else "Lưu trọn bộ Hà Giang",
                         fontWeight = FontWeight.Bold
                     )
                 }

@@ -70,6 +70,7 @@ fun TripScreen(
     val isGpsEnabled by viewModel.isGpsEnabled.collectAsState()
     val liveRideState by viewModel.liveRideState.collectAsState()
     val offlineMapStatus by viewModel.offlineMapStatus.collectAsState()
+    val preferredMapLayer by viewModel.preferredMapLayer.collectAsState()
 
     var selectedZoneId by remember { mutableStateOf<String?>(null) }
     var focusedPlace by remember { mutableStateOf<Place?>(null) }
@@ -143,6 +144,8 @@ fun TripScreen(
                 offlineMapStatus = offlineMapStatus,
                 onOpenOfflineMapPack = { viewModel.openOfflineMapDialog() },
                 onOpenSos = { viewModel.openSosSheet() },
+                preferredLayerStyle = preferredMapLayer,
+                onLayerStyleChanged = { viewModel.setPreferredMapLayer(it) },
                 modifier = Modifier.fillMaxSize()
             )
         } else {
@@ -555,8 +558,8 @@ fun TripScreen(
                                     Column {
                                         Text(
                                             text = if (offlineMapStatus.isReadyOffline) "Bản đồ Offline đã sẵn sàng (${String.format(Locale.US, "%.1f", offlineMapStatus.storageSizeMb)} MB)"
-                                            else if (offlineMapStatus.isDownloading) "Đang tải bản đồ Offline (${offlineMapStatus.downloadedTiles}/${offlineMapStatus.totalTiles})..."
-                                            else "Tải gói Bản đồ Offline Hà Giang vĩnh viễn (~24 MB)",
+                                            else if (offlineMapStatus.isDownloading) "Đang lưu bản đồ Offline (${offlineMapStatus.downloadedTiles}/${offlineMapStatus.totalTiles})..."
+                                            else "Lưu gói Bản đồ Địa hình Offline Hà Giang vào filesDir",
                                             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                                             color = TextPrimary
                                         )

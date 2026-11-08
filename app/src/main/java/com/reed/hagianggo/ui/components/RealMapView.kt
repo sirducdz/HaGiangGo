@@ -40,6 +40,7 @@ import com.reed.hagianggo.domain.LocationMath
 import com.reed.hagianggo.domain.OfflineMapManager
 import com.reed.hagianggo.model.*
 import com.reed.hagianggo.ui.theme.*
+import kotlinx.coroutines.delay
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
@@ -65,6 +66,12 @@ class TouchableMapView(context: Context) : MapView(context) {
         }
         return super.dispatchTouchEvent(ev)
     }
+}
+
+enum class MapLayerStyle(val label: String) {
+    STANDARD_OSM("Chuẩn OpenStreetMap"),
+    OPEN_TOPO("Địa hình Live (OpenTopo)"),
+    OFFLINE_TOPO("Địa hình Offline (filesDir)")
 }
 
 private val LOOP_OVERVIEW_CENTER = GeoPoint(23.0950, 105.1900)
@@ -182,14 +189,43 @@ fun RealMapView(
     offlineMapStatus: OfflineMapStatus? = null,
     onOpenOfflineMapPack: (() -> Unit)? = null,
     onOpenSos: (() -> Unit)? = null,
+    preferredLayerStyle: MapLayerStyle? = null,
+    onLayerStyleChanged: ((MapLayerStyle) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     var selectedPlace by remember { mutableStateOf<Place?>(null) }
-    var isTopoMode by remember { mutableStateOf(false) }
+    var localLayerOverride by remember { mutableStateOf<MapLayerStyle?>(null) }
+    var layerToastLabel by remember { mutableStateOf<String?>(null) }
+    var layerToastSeq by remember { mutableIntStateOf(0) }
     var mapViewInstance by remember { mutableStateOf<MapView?>(null) }
     var hasMounted by remember { mutableStateOf(false) }
     var pendingFlyToUser by remember { mutableStateOf(false) }
+
+    val hasInternet = OfflineMapManager.hasValidatedInternet(context)
+    val effectiveLayerStyle = preferredLayerStyle
+        ?: localLayerOverride
+        ?: if (!hasInternet && offlineMapStatus?.isReadyOffline == true) {
+            MapLayerStyle.OFFLINE_TOPO
+        } else {
+            MapLayerStyle.STANDARD_OSM
+        }
+
+    // Tự ẩn nhãn thông báo đổi kiểu bản đồ sau 2.2 giây
+    LaunchedEffect(layerToastSeq) {
+        if (layerToastSeq > 0) {
+            delay(2200L)
+            layerToastLabel = null
+        }
+    }
+
+    // Làm mới bộ nhớ đệm RAM ngay khi dựng xong gói Offline để hiển thị tức thì
+    LaunchedEffect(offlineMapStatus?.isReadyOffline) {
+        if (offlineMapStatus?.isReadyOffline == true) {
+            mapViewInstance?.tileProvider?.clearTileCache()
+            mapViewInstance?.invalidate()
+        }
+    }
 
     // Tự động bay tới vị trí người dùng ngay khi GPS vừa bắt được tọa độ sau khi bật Vị trí
     LaunchedEffect(currentLat, currentLng, isGpsEnabled) {
@@ -266,11 +302,18 @@ fun RealMapView(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
                 OfflineMapManager.configureOsmDroid(ctx)
+                val detailedLoopPts = OfflineMapManager.getDetailedLoopGeoPoints(ctx).ifEmpty { HA_GIANG_LOOP_WAYPOINTS }
                 TouchableMapView(ctx).apply {
                     mapViewInstance = this
                     setLayerType(View.LAYER_TYPE_HARDWARE, null)
-                    setUseDataConnection(OfflineMapManager.hasValidatedInternet(ctx))
-                    setTileSource(if (isTopoMode) TileSourceFactory.OpenTopo else TileSourceFactory.MAPNIK)
+                    val initialTileSource = when (effectiveLayerStyle) {
+                        MapLayerStyle.STANDARD_OSM -> TileSourceFactory.MAPNIK
+                        MapLayerStyle.OPEN_TOPO -> TileSourceFactory.OpenTopo
+                        MapLayerStyle.OFFLINE_TOPO -> OfflineMapManager.HA_GIANG_OFFLINE_TILE_SOURCE
+                    }
+                    val shouldUseData = effectiveLayerStyle != MapLayerStyle.OFFLINE_TOPO && OfflineMapManager.hasValidatedInternet(ctx)
+                    setUseDataConnection(shouldUseData)
+                    setTileSource(initialTileSource)
                     setMultiTouchControls(true)
                     isFlingEnabled = true
                     isTilesScaledToDpi = true
@@ -295,16 +338,15 @@ fun RealMapView(
 
                     overlays.clear()
 
-                    // 0. Đường dẫn vòng cung Hà Giang Loop (nằm dưới các ghim địa điểm)
+                    // 0. Đường dẫn vòng cung Hà Giang Loop thực tế (1.780 khúc cua đèo uốn lượn)
                     val loopLine = Polyline().apply {
                         infoWindow = null
-                        outlinePaint.color = android.graphics.Color.argb(120, 234, 88, 12) // ElectricOrange mờ thanh lịch
-                        outlinePaint.strokeWidth = 5.5f
+                        outlinePaint.color = android.graphics.Color.argb(135, 234, 88, 12) // ElectricOrange nổi bật thanh lịch
+                        outlinePaint.strokeWidth = 6.0f
                         outlinePaint.style = Paint.Style.STROKE
                         outlinePaint.strokeCap = Paint.Cap.ROUND
                         outlinePaint.strokeJoin = Paint.Join.ROUND
-                        outlinePaint.pathEffect = DashPathEffect(floatArrayOf(16f, 10f), 0f)
-                        setPoints(HA_GIANG_LOOP_WAYPOINTS)
+                        setPoints(detailedLoopPts)
                         setOnClickListener { _, _, _ -> false }
                     }
                     loopRouteRef = loopLine
@@ -351,16 +393,20 @@ fun RealMapView(
                 }
             },
             update = { mapView ->
-                // Tự động ngắt kết nối mạng của MapView khi rớt mạng / sóng 2G ảo để đọc cache 0ms không treo
-                val hasInternet = OfflineMapManager.hasValidatedInternet(context)
-                if (mapView.useDataConnection() != hasInternet) {
-                    mapView.setUseDataConnection(hasInternet)
+                val targetTileSource = when (effectiveLayerStyle) {
+                    MapLayerStyle.STANDARD_OSM -> TileSourceFactory.MAPNIK
+                    MapLayerStyle.OPEN_TOPO -> TileSourceFactory.OpenTopo
+                    MapLayerStyle.OFFLINE_TOPO -> OfflineMapManager.HA_GIANG_OFFLINE_TILE_SOURCE
+                }
+                // Ngắt kết nối mạng của MapView khi xem lớp Offline hoặc khi rớt mạng để đọc SqlTileWriter 0ms không treo
+                val shouldUseData = effectiveLayerStyle != MapLayerStyle.OFFLINE_TOPO && OfflineMapManager.hasValidatedInternet(context)
+                if (mapView.useDataConnection() != shouldUseData) {
+                    mapView.setUseDataConnection(shouldUseData)
                 }
 
-                // Chỉ đổi tile source khi người dùng bấm nút đổi layer
-                val currentTileSource = if (isTopoMode) TileSourceFactory.OpenTopo else TileSourceFactory.MAPNIK
-                if (mapView.tileProvider.tileSource != currentTileSource) {
-                    mapView.setTileSource(currentTileSource)
+                if (mapView.tileProvider.tileSource != targetTileSource) {
+                    mapView.setTileSource(targetTileSource)
+                    mapView.invalidate()
                 }
 
                 // Cập nhật danh sách place markers khi danh sách hoặc tọa độ thay đổi
@@ -472,21 +518,53 @@ fun RealMapView(
                 )
             }
 
-            // Nút chuyển đổi kiểu bản đồ (Tiêu chuẩn ⟷ Địa hình Topo)
+            // Nút chuyển đổi kiểu bản đồ (Chuẩn OSM ➔ Địa hình Live ➔ Địa hình Offline)
+            val isNonStandardLayer = effectiveLayerStyle != MapLayerStyle.STANDARD_OSM
             Box(
                 modifier = Modifier
                     .size(42.dp)
                     .shadow(8.dp, CircleShape, ambientColor = SoftShadowColor, spotColor = SoftShadowColor)
                     .clip(CircleShape)
-                    .background(if (isTopoMode) EmeraldGreenSoft else SurfaceGlass)
-                    .border(BorderStroke(1.dp, if (isTopoMode) EmeraldGreenBorder else BorderSubtle), CircleShape)
-                    .springClickable { isTopoMode = !isTopoMode },
+                    .background(
+                        when (effectiveLayerStyle) {
+                            MapLayerStyle.OFFLINE_TOPO -> EmeraldGreenSoft
+                            MapLayerStyle.OPEN_TOPO -> SkyTelemetrySoft
+                            MapLayerStyle.STANDARD_OSM -> SurfaceGlass
+                        }
+                    )
+                    .border(
+                        BorderStroke(
+                            1.dp,
+                            when (effectiveLayerStyle) {
+                                MapLayerStyle.OFFLINE_TOPO -> EmeraldGreenBorder
+                                MapLayerStyle.OPEN_TOPO -> SkyTelemetryBorder
+                                MapLayerStyle.STANDARD_OSM -> BorderSubtle
+                            }
+                        ),
+                        CircleShape
+                    )
+                    .springClickable {
+                        val offlineReady = offlineMapStatus?.isReadyOffline == true
+                        val nextStyle = when (effectiveLayerStyle) {
+                            MapLayerStyle.STANDARD_OSM -> MapLayerStyle.OPEN_TOPO
+                            MapLayerStyle.OPEN_TOPO -> if (offlineReady) MapLayerStyle.OFFLINE_TOPO else MapLayerStyle.STANDARD_OSM
+                            MapLayerStyle.OFFLINE_TOPO -> MapLayerStyle.STANDARD_OSM
+                        }
+                        localLayerOverride = nextStyle
+                        onLayerStyleChanged?.invoke(nextStyle)
+                        layerToastLabel = "🗺️ ${nextStyle.label}"
+                        layerToastSeq += 1
+                    },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     Icons.Default.Layers,
                     contentDescription = "Đổi kiểu bản đồ",
-                    tint = if (isTopoMode) EmeraldGreenText else TextSecondary,
+                    tint = when {
+                        effectiveLayerStyle == MapLayerStyle.OFFLINE_TOPO -> EmeraldGreenText
+                        isNonStandardLayer -> SkyTelemetry
+                        else -> TextSecondary
+                    },
                     modifier = Modifier.size(19.dp)
                 )
             }
@@ -570,6 +648,33 @@ fun RealMapView(
                         contentDescription = if (isMapFullscreen) "Thu nhỏ" else "Toàn màn hình",
                         tint = if (isMapFullscreen) ElectricOrangeHover else TextSecondary,
                         modifier = Modifier.size(19.dp)
+                    )
+                }
+            }
+        }
+
+        // Huy hiệu nhỏ tự ẩn sau 2.2s khi đổi lớp bản đồ
+        AnimatedVisibility(
+            visible = layerToastLabel != null,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .statusBarsPadding()
+                .padding(top = controlsTopPadding, start = 14.dp)
+        ) {
+            layerToastLabel?.let { lbl ->
+                Surface(
+                    shape = CircleShape,
+                    color = SurfaceGlass,
+                    border = BorderStroke(1.dp, BorderSubtle),
+                    shadowElevation = 6.dp
+                ) {
+                    Text(
+                        text = lbl,
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = TextPrimary,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                     )
                 }
             }
