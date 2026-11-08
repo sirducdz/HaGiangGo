@@ -11,7 +11,8 @@ object JsonBackupManager {
         places: List<Place>,
         expenses: List<Expense>,
         checklist: List<ChecklistItem>,
-        journal: List<JournalEntry>
+        journal: List<JournalEntry>,
+        members: List<TripMember> = emptyList()
     ): String {
         val root = JSONObject()
 
@@ -62,10 +63,26 @@ object JsonBackupManager {
                 put("title", e.title)
                 put("dayNumber", e.dayNumber)
                 put("createdAt", e.createdAt)
+                put("paidByMemberId", e.paidByMemberId)
+                put("splitAmongIds", JSONArray(e.splitAmongIds))
             }
             expensesArray.put(eObj)
         }
         root.put("expenses", expensesArray)
+
+        // 3b. Trip Members
+        if (members.isNotEmpty()) {
+            val membersArray = JSONArray()
+            for (m in members) {
+                val mObj = JSONObject().apply {
+                    put("id", m.id)
+                    put("name", m.name)
+                    put("isMe", m.isMe)
+                }
+                membersArray.put(mObj)
+            }
+            root.put("members", membersArray)
+        }
 
         // 4. Checklist
         val checklistArray = JSONArray()
@@ -141,13 +158,37 @@ object JsonBackupManager {
         if (expensesArray != null) {
             for (i in 0 until expensesArray.length()) {
                 val obj = expensesArray.getJSONObject(i)
+                val splitArr = obj.optJSONArray("splitAmongIds")
+                val splitIds = mutableListOf<String>()
+                if (splitArr != null) {
+                    for (s in 0 until splitArr.length()) {
+                        splitIds.add(splitArr.getString(s))
+                    }
+                }
                 expenses.add(
                     Expense(
                         amount = obj.getLong("amount"),
                         category = ExpenseCategory.fromCode(obj.getString("category")),
                         title = obj.getString("title"),
                         dayNumber = obj.getInt("dayNumber"),
-                        createdAt = obj.optLong("createdAt", System.currentTimeMillis())
+                        createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
+                        paidByMemberId = obj.optString("paidByMemberId", "me").ifBlank { "me" },
+                        splitAmongIds = splitIds
+                    )
+                )
+            }
+        }
+
+        val members = mutableListOf<TripMember>()
+        val membersArray = root.optJSONArray("members")
+        if (membersArray != null) {
+            for (i in 0 until membersArray.length()) {
+                val obj = membersArray.getJSONObject(i)
+                members.add(
+                    TripMember(
+                        id = obj.getString("id"),
+                        name = obj.getString("name"),
+                        isMe = obj.optBoolean("isMe", false)
                     )
                 )
             }
@@ -168,12 +209,13 @@ object JsonBackupManager {
             }
         }
 
-        return ImportPayload(places, expenses, checklist)
+        return ImportPayload(places, expenses, checklist, members)
     }
 
     data class ImportPayload(
         val places: List<Place>,
         val expenses: List<Expense>,
-        val checklist: List<ChecklistItem>
+        val checklist: List<ChecklistItem>,
+        val members: List<TripMember> = emptyList()
     )
 }

@@ -2,4 +2,5 @@
 <paths>
     <external-files-path name="journal_photos" path="Pictures/" />
     <files-path name="internal_photos" path="photos/" />
+    <files-path name="recap_posters" path="posters/" />
 </paths>

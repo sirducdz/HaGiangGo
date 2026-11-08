@@ -5,8 +5,12 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.reed.hagianggo.data.HaGiangRepository
 import com.reed.hagianggo.data.JsonBackupManager
+import com.reed.hagianggo.domain.FuelRangeGuard
 import com.reed.hagianggo.domain.LocationMath
+import com.reed.hagianggo.domain.MountainWeatherManager
 import com.reed.hagianggo.domain.OfflineLocationTracker
+import com.reed.hagianggo.domain.OfflineMapManager
+import com.reed.hagianggo.domain.SplitbillEngine
 import com.reed.hagianggo.domain.WhatNowEngine
 import com.reed.hagianggo.model.*
 import com.reed.hagianggo.service.RideTrackerService
@@ -17,6 +21,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val repository = HaGiangRepository(application)
     val locationTracker = OfflineLocationTracker(application)
+    val offlineMapManager = OfflineMapManager(application)
+    val weatherManager = MountainWeatherManager(repository)
 
     val zones = repository.zones
     val places = repository.places
@@ -25,6 +31,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val expenses = repository.expenses
     val journal = repository.journal
     val checklist = repository.checklist
+    val members = repository.members
+    val fuelState = repository.fuelState
+    val rideStats = repository.rideStats
+
+    val offlineMapStatus = offlineMapManager.status
+    val weatherForecasts = weatherManager.forecasts
+    val isWeatherSyncing = weatherManager.isSyncing
 
     val currentLocation = locationTracker.currentLocation
     val isGpsEnabled = locationTracker.isGpsEnabled
@@ -48,6 +61,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _notificationMessage = MutableStateFlow<String?>(null)
     val notificationMessage: StateFlow<String?> = _notificationMessage.asStateFlow()
+
+    private val _isSosSheetOpen = MutableStateFlow(false)
+    val isSosSheetOpen: StateFlow<Boolean> = _isSosSheetOpen.asStateFlow()
+
+    private val _isWeatherSheetOpen = MutableStateFlow(false)
+    val isWeatherSheetOpen: StateFlow<Boolean> = _isWeatherSheetOpen.asStateFlow()
+
+    private val _isRecapSheetOpen = MutableStateFlow(false)
+    val isRecapSheetOpen: StateFlow<Boolean> = _isRecapSheetOpen.asStateFlow()
+
+    private val _isOfflineMapDialogOpen = MutableStateFlow(false)
+    val isOfflineMapDialogOpen: StateFlow<Boolean> = _isOfflineMapDialogOpen.asStateFlow()
 
     // Cụm chặng hiện tại (tính từ override tay hoặc chip GPS)
     val activeZone: StateFlow<Zone?> = combine(
@@ -114,16 +139,76 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // Cảnh báo Tầm Xăng & Điểm mù Cây xăng trên đèo
+    val fuelAdvisory: StateFlow<FuelAdvisory> = combine(
+        fuelState,
+        tripConfig,
+        currentLocation,
+        activeZone,
+        places
+    ) { fState, cfg, loc, z, allPlaces ->
+        FuelRangeGuard.evaluate(
+            fuelState = fState,
+            vehicle = cfg.vehicle,
+            currentLat = loc?.first,
+            currentLng = loc?.second,
+            activeZone = z,
+            places = allPlaces
+        )
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        FuelRangeGuard.evaluate(FuelState(), VehicleType.MOTORBIKE, null, null, null, emptyList())
+    )
+
+    // Tính toán Chia tiền nhóm phượt (Splitbill)
+    val memberBalances: StateFlow<List<MemberBalance>> = combine(
+        members,
+        expenses
+    ) { mList, eList ->
+        SplitbillEngine.calculateBalances(mList, eList)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val settlementTransfers: StateFlow<List<SettlementTransfer>> = memberBalances
+        .map { SplitbillEngine.computeSettlements(it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     init {
         viewModelScope.launch {
             repository.initialize()
             locationTracker.startListening()
+            val loadedZones = repository.zones.value
+            weatherManager.loadCachedOrBaseline(loadedZones)
+            if (OfflineMapManager.hasValidatedInternet(getApplication())) {
+                weatherManager.syncLiveForecasts(loadedZones, force = false)
+            }
+        }
+        viewModelScope.launch {
+            RideTrackerService.liveRideState
+                .map { (it.totalDistanceKm * 10).toInt() }
+                .distinctUntilChanged()
+                .collect {
+                    repository.refreshFuelAndRideStats()
+                }
         }
     }
 
     override fun onCleared() {
         super.onCleared()
         locationTracker.stopListening()
+    }
+
+    fun onAppResumed() {
+        locationTracker.refreshLocationState(requestImmediate = true)
+    }
+
+    fun requestImmediateMyLocation() {
+        locationTracker.refreshLocationState(requestImmediate = true)
+        if (!isGpsEnabled.value) {
+            showNotification("Hãy bật Vị trí (GPS) để tự động định vị ngay!")
+        } else if (currentLocation.value == null) {
+            showNotification("Đang bắt tín hiệu vệ tinh GPS...")
+        }
     }
 
     fun selectTab(tabIndex: Int) {
@@ -199,22 +284,55 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateTripConfig(config: TripConfig) {
         viewModelScope.launch {
+            val prevVehicle = tripConfig.value.vehicle
             repository.updateTripConfig(config)
+            if (prevVehicle != config.vehicle) {
+                val newMax = FuelRangeGuard.defaultMaxRangeForVehicle(config.vehicle)
+                val curFuel = fuelState.value
+                val ratio = (curFuel.remainingKm / curFuel.maxRangeKm.coerceAtLeast(1).toDouble()).coerceIn(0.1, 1.0)
+                repository.updateFuelState(
+                    curFuel.copy(
+                        maxRangeKm = newMax,
+                        remainingKm = newMax * ratio
+                    )
+                )
+            }
             showNotification("Đã cập nhật cấu hình chuyến đi.")
         }
     }
 
-    fun addExpense(amount: Long, category: ExpenseCategory, title: String, dayNumber: Int) {
+    fun addExpense(
+        amount: Long,
+        category: ExpenseCategory,
+        title: String,
+        dayNumber: Int,
+        paidByMemberId: String = "me",
+        splitAmongIds: List<String> = emptyList()
+    ) {
         viewModelScope.launch {
             repository.addExpense(
                 Expense(
                     amount = amount,
                     category = category,
                     title = title,
-                    dayNumber = dayNumber
+                    dayNumber = dayNumber,
+                    paidByMemberId = paidByMemberId,
+                    splitAmongIds = splitAmongIds
                 )
             )
-            showNotification("Đã thêm chi tiêu: +${amount}đ")
+            // Nếu người dùng vừa ghi chi tiêu Đổ xăng thì tự động gợi ý / nạp đầy bình xăng!
+            if (category == ExpenseCategory.FUEL) {
+                val cur = fuelState.value
+                repository.updateFuelState(
+                    cur.copy(
+                        remainingKm = cur.maxRangeKm.toDouble(),
+                        lastRefuelAt = System.currentTimeMillis()
+                    )
+                )
+                showNotification("Đã ghi tiền xăng +${amount}đ & tự cập nhật đầy bình!")
+            } else {
+                showNotification("Đã thêm chi tiêu: +${amount}đ")
+            }
         }
     }
 
@@ -269,7 +387,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             places = places.value,
             expenses = expenses.value,
             checklist = checklist.value,
-            journal = journal.value
+            journal = journal.value,
+            members = members.value
         )
     }
 
@@ -322,7 +441,163 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun stopRide() {
         RideTrackerService.stopRide(getApplication())
         _isCockpitOpen.value = false
+        viewModelScope.launch {
+            repository.refreshFuelAndRideStats()
+        }
         showNotification("Đã kết thúc và lưu chặng xe.")
+    }
+
+    // ====== Adventure Pack Controls (Offline Map, SOS, Fuel, Weather, Splitbill, Poster) ======
+
+    fun openSosSheet() {
+        locationTracker.refreshLocationState(requestImmediate = true)
+        _isSosSheetOpen.value = true
+    }
+
+    fun closeSosSheet() {
+        _isSosSheetOpen.value = false
+    }
+
+    fun openWeatherSheet() {
+        _isWeatherSheetOpen.value = true
+        if (OfflineMapManager.hasValidatedInternet(getApplication())) {
+            viewModelScope.launch {
+                weatherManager.syncLiveForecasts(zones.value, force = false)
+            }
+        }
+    }
+
+    fun closeWeatherSheet() {
+        _isWeatherSheetOpen.value = false
+    }
+
+    fun syncMountainWeatherNow() {
+        viewModelScope.launch {
+            if (!OfflineMapManager.hasValidatedInternet(getApplication())) {
+                showNotification("Đang mất mạng • Hiển thị dự báo đã lưu Offline")
+                return@launch
+            }
+            val ok = weatherManager.syncLiveForecasts(zones.value, force = true)
+            if (ok) {
+                showNotification("Đã đồng bộ thời tiết & săn mây 8 cụm đèo!")
+            } else {
+                showNotification("Không thể kết nối máy chủ thời tiết lúc này.")
+            }
+        }
+    }
+
+    fun applyZoneWeatherToWhatNow(zone: Zone, forecast: ZoneWeatherForecast) {
+        val mappedWeather = if (forecast.isFogHazard || forecast.rainProbPercent >= 55) {
+            CurrentWeather.RAIN_FOG
+        } else {
+            CurrentWeather.SUNNY
+        }
+        _whatNowQuery.value = _whatNowQuery.value.copy(
+            zoneId = zone.id,
+            weather = mappedWeather
+        )
+        _shuffleOffset.value = 0
+        _isWeatherSheetOpen.value = false
+        _isWhatNowOpen.value = true
+    }
+
+    fun openRecapSheet() {
+        viewModelScope.launch {
+            repository.refreshFuelAndRideStats()
+            _isRecapSheetOpen.value = true
+        }
+    }
+
+    fun closeRecapSheet() {
+        _isRecapSheetOpen.value = false
+    }
+
+    fun openOfflineMapDialog() {
+        offlineMapManager.refreshStatus()
+        _isOfflineMapDialogOpen.value = true
+    }
+
+    fun closeOfflineMapDialog() {
+        _isOfflineMapDialogOpen.value = false
+    }
+
+    fun startOfflineMapDownload() {
+        offlineMapManager.startDownload(zones.value, places.value)
+    }
+
+    fun cancelOfflineMapDownload() {
+        offlineMapManager.cancelDownload()
+    }
+
+    fun markTankRefueled() {
+        viewModelScope.launch {
+            val maxKm = FuelRangeGuard.defaultMaxRangeForVehicle(tripConfig.value.vehicle)
+            val cur = fuelState.value
+            repository.updateFuelState(
+                cur.copy(
+                    maxRangeKm = maxKm,
+                    remainingKm = maxKm.toDouble(),
+                    lastRefuelAt = System.currentTimeMillis()
+                )
+            )
+            showNotification("⛽ Đã đặt lại bình xăng đầy (~${maxKm} km)!")
+        }
+    }
+
+    fun setFuelFraction(fraction: Float) {
+        viewModelScope.launch {
+            val cur = fuelState.value
+            val maxKm = cur.maxRangeKm.coerceAtLeast(50)
+            repository.updateFuelState(
+                cur.copy(
+                    remainingKm = (maxKm * fraction.coerceIn(0.05f, 1f)).toDouble()
+                )
+            )
+        }
+    }
+
+    fun saveEmergencyPhone(phone: String) {
+        viewModelScope.launch {
+            val cur = fuelState.value
+            if (cur.emergencyContactPhone != phone) {
+                repository.updateFuelState(cur.copy(emergencyContactPhone = phone))
+            }
+        }
+    }
+
+    fun addTripMember(name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) return
+        viewModelScope.launch {
+            repository.addOrUpdateMember(
+                TripMember(
+                    id = "mem_${System.currentTimeMillis()}",
+                    name = trimmed,
+                    isMe = false
+                )
+            )
+            showNotification("Đã thêm bạn đồng hành: $trimmed")
+        }
+    }
+
+    fun removeTripMember(memberId: String) {
+        if (memberId == "me") return
+        viewModelScope.launch {
+            repository.deleteMember(memberId)
+            showNotification("Đã xóa thành viên khỏi danh sách chia tiền.")
+        }
+    }
+
+    fun buildSplitbillSummaryText(): String {
+        return SplitbillEngine.formatShareableSummary(
+            expenses = expenses.value,
+            balances = memberBalances.value,
+            transfers = settlementTransfers.value
+        )
+    }
+
+    fun notifyMessage(msg: String) {
+        showNotification(msg)
     }
 
     private fun showNotification(msg: String) {

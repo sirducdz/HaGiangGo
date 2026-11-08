@@ -189,6 +189,16 @@ fun NearbyScreen(
             ) {
                 val isAllSelected = selectedCategoryFilter == null && !filterRainShelterOnly && !filterBookmarkedOnly
                 NearbyFilterChip(
+                    label = "SOS 2G",
+                    icon = Icons.Default.Sos,
+                    isSelected = true,
+                    activeBg = RoseDestructiveSoft,
+                    activeBorder = RoseDestructiveBorder,
+                    activeContent = RoseDestructiveText,
+                    onClick = { viewModel.openSosSheet() }
+                )
+
+                NearbyFilterChip(
                     label = "Tất cả (${places.size})",
                     icon = Icons.Default.Explore,
                     isSelected = isAllSelected,

@@ -132,7 +132,84 @@ data class Expense(
     val category: ExpenseCategory,
     val title: String,
     val dayNumber: Int,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val paidByMemberId: String = "me",
+    val splitAmongIds: List<String> = emptyList()
+)
+
+data class TripMember(
+    val id: String,
+    val name: String,
+    val isMe: Boolean = false
+)
+
+data class MemberBalance(
+    val member: TripMember,
+    val totalPaid: Long,
+    val totalOwed: Long,
+    val netBalance: Long
+)
+
+data class SettlementTransfer(
+    val fromMemberName: String,
+    val toMemberName: String,
+    val amount: Long
+)
+
+data class FuelState(
+    val maxRangeKm: Int = 135,
+    val remainingKm: Double = 135.0,
+    val lastRefuelAt: Long = 0L,
+    val emergencyContactPhone: String = ""
+)
+
+data class FuelAdvisory(
+    val nearestStation: Place?,
+    val distanceToNearestKm: Double,
+    val nextGapAheadKm: Double,
+    val gapWarningTitle: String?,
+    val gapWarningDetail: String?,
+    val isCriticalLow: Boolean,
+    val fuelPercent: Float
+)
+
+data class DailyZoneTemp(
+    val dateLabel: String,
+    val minTempC: Int,
+    val maxTempC: Int,
+    val rainProbPercent: Int
+)
+
+data class ZoneWeatherForecast(
+    val zoneId: String,
+    val currentTempC: Int,
+    val minTempC: Int,
+    val maxTempC: Int,
+    val rainProbPercent: Int,
+    val cloudHuntScore: Int,
+    val isFogHazard: Boolean,
+    val summaryLabel: String,
+    val dailyForecasts: List<DailyZoneTemp> = emptyList(),
+    val isFromLiveSync: Boolean = false,
+    val fetchedAt: Long = 0L
+)
+
+data class OfflineMapStatus(
+    val isDownloading: Boolean = false,
+    val downloadedTiles: Int = 0,
+    val totalTiles: Int = 0,
+    val storageSizeMb: Double = 0.0,
+    val isReadyOffline: Boolean = false,
+    val statusMessage: String = "Chưa tải gói bản đồ Offline",
+    val errorMessage: String? = null
+)
+
+data class RideSummaryStats(
+    val totalRecordedKm: Double = 0.0,
+    val maxRecordedSpeedKmh: Float = 0f,
+    val maxRecordedAltitudeM: Int = 0,
+    val sessionCount: Int = 0,
+    val allTrackPoints: List<Pair<Double, Double>> = emptyList()
 )
 
 data class JournalEntry(

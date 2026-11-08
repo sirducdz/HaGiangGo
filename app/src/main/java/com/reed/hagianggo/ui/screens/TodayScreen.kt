@@ -57,6 +57,9 @@ fun TodayScreen(
     val isOutsideHaGiang by viewModel.isOutsideHaGiang.collectAsState()
     val distanceToHaGiangKm by viewModel.distanceToHaGiangKm.collectAsState()
     val liveRideState by viewModel.liveRideState.collectAsState()
+    val fuelState by viewModel.fuelState.collectAsState()
+    val fuelAdvisory by viewModel.fuelAdvisory.collectAsState()
+    val weatherForecasts by viewModel.weatherForecasts.collectAsState()
 
     var selectedDay by remember { mutableIntStateOf(1) }
     var highlightedPlaceId by remember { mutableStateOf<String?>(null) }
@@ -357,6 +360,285 @@ fun TodayScreen(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
+                    }
+                }
+            }
+        }
+
+        // =====================================================================
+        // 2B. TRẠM AN TOÀN ĐÈO NÚI: THỜI TIẾT SĂN MÂY × CỨU HỘ SOS × TẦM XĂNG
+        // =====================================================================
+        item(key = "weather_and_sos_row") {
+            val activeWeather = activeZone?.id?.let { weatherForecasts[it] } ?: weatherForecasts.values.firstOrNull()
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Bento Thời tiết Đèo & Săn mây
+                ShadcnCard(
+                    modifier = Modifier.weight(1.15f),
+                    shape = RoundedCornerShape(18.dp),
+                    backgroundColor = SurfaceWhite,
+                    borderColor = if (activeWeather?.isFogHazard == true) RoseDestructiveBorder else SkyTelemetryBorder,
+                    onClick = { viewModel.openWeatherSheet() }
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(SkyTelemetrySoft),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.Cloud,
+                                    contentDescription = null,
+                                    tint = SkyTelemetry,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            ShadcnBadge(
+                                text = "☁️ MÂY ${activeWeather?.cloudHuntScore ?: 68}%",
+                                variant = if ((activeWeather?.cloudHuntScore ?: 68) >= 70) ShadcnBadgeVariant.Emerald else ShadcnBadgeVariant.Sky
+                            )
+                        }
+
+                        Text(
+                            text = "${activeWeather?.currentTempC ?: 18}°C • ${activeZone?.name?.substringBefore("(")?.trim() ?: "Hà Giang"}",
+                            style = TelemetryTextStyle.copy(fontSize = 15.5.sp),
+                            color = TextPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = activeWeather?.summaryLabel ?: "Xem dự báo 8 cụm đèo & săn mây",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (activeWeather?.isFogHazard == true) RoseDestructiveText else TextSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+
+                // Bento SOS Cứu hộ 2G & Poster Hành trình
+                Column(
+                    modifier = Modifier.weight(0.85f),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ShadcnCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(15.dp),
+                        backgroundColor = RoseDestructiveSoft,
+                        borderColor = RoseDestructiveBorder,
+                        onClick = { viewModel.openSosSheet() }
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 11.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text(
+                                    text = "🆘 SOS ĐÈO NÚI",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Black),
+                                    color = RoseDestructiveText
+                                )
+                                Text(
+                                    text = "SMS 2G & Sửa xe",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextPrimary,
+                                    maxLines = 1
+                                )
+                            }
+                            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = RoseDestructiveText, modifier = Modifier.size(18.dp))
+                        }
+                    }
+
+                    ShadcnCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(15.dp),
+                        backgroundColor = SurfaceWhite,
+                        borderColor = ElectricOrangeBorder,
+                        onClick = { viewModel.openRecapSheet() }
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text(
+                                    text = "🖼️ POSTER RECAP",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Black),
+                                    color = ElectricOrangeHover
+                                )
+                                Text(
+                                    text = "Tổng kết hành trình",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSecondary,
+                                    maxLines = 1
+                                )
+                            }
+                            Icon(Icons.Default.AutoAwesomeMotion, contentDescription = null, tint = ElectricOrange, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+            }
+        }
+
+        // Thẻ Cảnh báo Tầm hoạt động Xăng & Điểm mù Cây xăng trên đèo
+        item(key = "fuel_range_guard_card") {
+            val animFuelPct by animateFloatAsState(
+                targetValue = fuelAdvisory.fuelPercent,
+                animationSpec = spring(dampingRatio = 0.84f, stiffness = 320f),
+                label = "FuelBarAnim"
+            )
+            ShadcnCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                backgroundColor = SurfaceWhite,
+                borderColor = if (fuelAdvisory.isCriticalLow) AmberWarningBorder else BorderSubtle
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(AmberWarningSoft),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.LocalGasStation,
+                                    contentDescription = null,
+                                    tint = AmberWarningText,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(9.dp))
+                            Column {
+                                Text(
+                                    text = "TẦM XĂNG & CÂY XĂNG ĐÈO",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = if (fuelAdvisory.isCriticalLow) AmberWarningText else TextMuted
+                                )
+                                Text(
+                                    text = "Còn đi được ~${fuelState.remainingKm.toInt()} / ${fuelState.maxRangeKm} km",
+                                    style = TelemetryTextStyle.copy(fontSize = 14.sp),
+                                    color = TextPrimary
+                                )
+                            }
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .background(EmeraldGreenSoft)
+                                .border(BorderStroke(1.dp, EmeraldGreenBorder), CircleShape)
+                                .springClickable { viewModel.markTankRefueled() }
+                                .padding(horizontal = 11.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = "⛽ Vừa đổ đầy",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = EmeraldGreenText
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Thanh mức xăng lò xo
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(8.dp)
+                            .clip(CircleShape)
+                            .background(SurfaceMuted)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .fillMaxWidth(animFuelPct.coerceIn(0.04f, 1f))
+                                .clip(CircleShape)
+                                .background(
+                                    when {
+                                        animFuelPct <= 0.28f -> RoseDestructive
+                                        animFuelPct <= 0.50f -> AmberWarning
+                                        else -> EmeraldGreen
+                                    }
+                                )
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Hàng chọn nhanh vạch xăng trên đồng hồ xe + chỉ đường cây xăng gần nhất
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("Vạch xe:", style = MaterialTheme.typography.labelSmall, color = TextMuted)
+                            listOf(0.25f to "1/4", 0.5f to "1/2", 0.75f to "3/4").forEach { (frac, label) ->
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(7.dp))
+                                        .background(SurfaceMuted)
+                                        .springClickable { viewModel.setFuelFraction(frac) }
+                                        .padding(horizontal = 7.dp, vertical = 3.5.dp)
+                                ) {
+                                    Text(label, fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
+                                }
+                            }
+                        }
+
+                        fuelAdvisory.nearestStation?.let { station ->
+                            Text(
+                                text = "📍 Gần nhất ~${String.format(Locale.US, "%.1f", fuelAdvisory.distanceToNearestKm)} km",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = ElectricOrangeHover,
+                                modifier = Modifier.clickable {
+                                    LocationMath.openNavigationIntent(context, station.lat, station.lng, station.name)
+                                }
+                            )
+                        }
+                    }
+
+                    if (fuelAdvisory.gapWarningTitle != null && (fuelAdvisory.isCriticalLow || fuelAdvisory.nextGapAheadKm >= 40.0)) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(11.dp))
+                                .background(if (fuelAdvisory.isCriticalLow) RoseDestructiveSoft else AmberWarningSoft)
+                                .padding(horizontal = 10.dp, vertical = 7.dp)
+                        ) {
+                            Text(
+                                text = "⚠ ${fuelAdvisory.gapWarningTitle}: ${fuelAdvisory.gapWarningDetail}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (fuelAdvisory.isCriticalLow) RoseDestructiveText else AmberWarningText
+                            )
+                        }
                     }
                 }
             }

@@ -98,4 +98,25 @@ object LocationMath {
             // Ignore
         }
     }
+
+    fun openSmsBeaconIntent(context: Context, phoneNumber: String, message: String) {
+        val cleanPhone = phoneNumber.trim()
+        try {
+            val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:$cleanPhone")).apply {
+                putExtra("sms_body", message)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            context.startActivity(intent)
+        } catch (_: Exception) {
+            try {
+                val fallback = Intent(Intent.ACTION_VIEW, Uri.parse("sms:$cleanPhone")).apply {
+                    putExtra("sms_body", message)
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(fallback)
+            } catch (_: Exception) {
+                // Ignore
+            }
+        }
+    }
 }

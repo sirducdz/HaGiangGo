@@ -12,7 +12,7 @@ class HaGiangDatabase(private val context: Context) :
 
     companion object {
         const val DATABASE_NAME = "hagiang_go.db"
-        const val DATABASE_VERSION = 3
+        const val DATABASE_VERSION = 4
 
         @Volatile
         private var INSTANCE: HaGiangDatabase? = null
@@ -98,7 +98,9 @@ class HaGiangDatabase(private val context: Context) :
                 category TEXT NOT NULL,
                 title TEXT NOT NULL,
                 day_number INTEGER NOT NULL,
-                created_at INTEGER NOT NULL
+                created_at INTEGER NOT NULL,
+                paid_by_id TEXT DEFAULT 'me',
+                split_ids TEXT DEFAULT ''
             )
             """.trimIndent()
         )
@@ -170,6 +172,56 @@ class HaGiangDatabase(private val context: Context) :
             put("preferences", "view,food,cafe")
         }
         db.insert("trip_config", null, configValues)
+
+        ensureAdventurePackTables(db)
+    }
+
+    private fun ensureAdventurePackTables(db: SQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS trip_members (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                is_me INTEGER DEFAULT 0
+            )
+            """.trimIndent()
+        )
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS weather_cache (
+                zone_id TEXT PRIMARY KEY,
+                forecast_json TEXT NOT NULL,
+                fetched_at INTEGER NOT NULL
+            )
+            """.trimIndent()
+        )
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS rider_safety_state (
+                id INTEGER PRIMARY KEY,
+                max_range_km INTEGER NOT NULL,
+                remaining_km REAL NOT NULL,
+                last_refuel_at INTEGER NOT NULL,
+                emergency_phone TEXT DEFAULT ''
+            )
+            """.trimIndent()
+        )
+
+        val defaultMember = ContentValues().apply {
+            put("id", "me")
+            put("name", "Tôi")
+            put("is_me", 1)
+        }
+        db.insertWithOnConflict("trip_members", null, defaultMember, SQLiteDatabase.CONFLICT_IGNORE)
+
+        val defaultFuel = ContentValues().apply {
+            put("id", 1)
+            put("max_range_km", 135)
+            put("remaining_km", 135.0)
+            put("last_refuel_at", 0L)
+            put("emergency_phone", "")
+        }
+        db.insertWithOnConflict("rider_safety_state", null, defaultFuel, SQLiteDatabase.CONFLICT_IGNORE)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -202,6 +254,15 @@ class HaGiangDatabase(private val context: Context) :
                 )
                 """.trimIndent()
             )
+        }
+        if (oldVersion < 4) {
+            ensureAdventurePackTables(db)
+            try {
+                db.execSQL("ALTER TABLE expenses ADD COLUMN paid_by_id TEXT DEFAULT 'me'")
+            } catch (_: Exception) {}
+            try {
+                db.execSQL("ALTER TABLE expenses ADD COLUMN split_ids TEXT DEFAULT ''")
+            } catch (_: Exception) {}
         }
     }
 
@@ -502,10 +563,17 @@ class HaGiangDatabase(private val context: Context) :
         val list = mutableListOf<Expense>()
         val db = readableDatabase
         val cursor = db.rawQuery(
-            "SELECT id, amount, category, title, day_number, created_at FROM expenses ORDER BY created_at DESC",
+            "SELECT id, amount, category, title, day_number, created_at, paid_by_id, split_ids FROM expenses ORDER BY created_at DESC",
             null
         )
         while (cursor.moveToNext()) {
+            val paidBy = cursor.getString(6)?.takeIf { it.isNotBlank() } ?: "me"
+            val splitRaw = cursor.getString(7) ?: ""
+            val splitList = if (splitRaw.isNotBlank()) {
+                splitRaw.split(",").filter { it.isNotBlank() }
+            } else {
+                emptyList()
+            }
             list.add(
                 Expense(
                     id = cursor.getLong(0),
@@ -513,7 +581,9 @@ class HaGiangDatabase(private val context: Context) :
                     category = ExpenseCategory.fromCode(cursor.getString(2)),
                     title = cursor.getString(3),
                     dayNumber = cursor.getInt(4),
-                    createdAt = cursor.getLong(5)
+                    createdAt = cursor.getLong(5),
+                    paidByMemberId = paidBy,
+                    splitAmongIds = splitList
                 )
             )
         }
@@ -528,6 +598,8 @@ class HaGiangDatabase(private val context: Context) :
             put("title", expense.title)
             put("day_number", expense.dayNumber)
             put("created_at", expense.createdAt)
+            put("paid_by_id", expense.paidByMemberId.ifBlank { "me" })
+            put("split_ids", expense.splitAmongIds.joinToString(","))
         }
         return writableDatabase.insert("expenses", null, cv)
     }
@@ -673,5 +745,169 @@ class HaGiangDatabase(private val context: Context) :
         }
         cursor.close()
         return list
+    }
+
+    // ====== Adventure Pack: Trip Members (Splitbill) ======
+
+    fun getAllMembers(): List<TripMember> {
+        val list = mutableListOf<TripMember>()
+        val db = readableDatabase
+        val cursor = db.rawQuery(
+            "SELECT id, name, is_me FROM trip_members ORDER BY is_me DESC, name ASC",
+            null
+        )
+        while (cursor.moveToNext()) {
+            list.add(
+                TripMember(
+                    id = cursor.getString(0),
+                    name = cursor.getString(1),
+                    isMe = cursor.getInt(2) == 1
+                )
+            )
+        }
+        cursor.close()
+        if (list.none { it.id == "me" }) {
+            val me = TripMember(id = "me", name = "Tôi", isMe = true)
+            insertOrUpdateMember(me)
+            list.add(0, me)
+        }
+        return list
+    }
+
+    fun insertOrUpdateMember(member: TripMember) {
+        val cv = ContentValues().apply {
+            put("id", member.id)
+            put("name", member.name.trim().ifBlank { "Bạn đồng hành" })
+            put("is_me", if (member.isMe) 1 else 0)
+        }
+        writableDatabase.insertWithOnConflict("trip_members", null, cv, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    fun deleteMember(memberId: String) {
+        if (memberId == "me") return
+        writableDatabase.delete("trip_members", "id = ?", arrayOf(memberId))
+    }
+
+    // ====== Adventure Pack: Fuel Guard & Emergency Contact ======
+
+    fun getFuelState(): FuelState {
+        val db = readableDatabase
+        val cursor = db.rawQuery(
+            "SELECT max_range_km, remaining_km, last_refuel_at, emergency_phone FROM rider_safety_state WHERE id = 1",
+            null
+        )
+        val state = if (cursor.moveToFirst()) {
+            FuelState(
+                maxRangeKm = cursor.getInt(0).coerceAtLeast(50),
+                remainingKm = cursor.getDouble(1).coerceAtLeast(0.0),
+                lastRefuelAt = cursor.getLong(2),
+                emergencyContactPhone = cursor.getString(3) ?: ""
+            )
+        } else {
+            FuelState()
+        }
+        cursor.close()
+        return state
+    }
+
+    fun updateFuelState(state: FuelState) {
+        val cv = ContentValues().apply {
+            put("id", 1)
+            put("max_range_km", state.maxRangeKm.coerceAtLeast(50))
+            put("remaining_km", state.remainingKm.coerceIn(0.0, state.maxRangeKm.toDouble()))
+            put("last_refuel_at", state.lastRefuelAt)
+            put("emergency_phone", state.emergencyContactPhone.trim())
+        }
+        writableDatabase.insertWithOnConflict("rider_safety_state", null, cv, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    fun deductFuelKm(deltaKm: Double) {
+        if (deltaKm <= 0.0) return
+        val current = getFuelState()
+        val nextRemaining = (current.remainingKm - deltaKm).coerceAtLeast(0.0)
+        updateFuelState(current.copy(remainingKm = nextRemaining))
+    }
+
+    // ====== Adventure Pack: Offline 8-Zone Weather Cache ======
+
+    fun getAllWeatherCache(): Map<String, Pair<String, Long>> {
+        val map = mutableMapOf<String, Pair<String, Long>>()
+        val db = readableDatabase
+        val cursor = db.rawQuery("SELECT zone_id, forecast_json, fetched_at FROM weather_cache", null)
+        while (cursor.moveToNext()) {
+            map[cursor.getString(0)] = Pair(cursor.getString(1), cursor.getLong(2))
+        }
+        cursor.close()
+        return map
+    }
+
+    fun saveWeatherCache(zoneId: String, forecastJson: String, fetchedAt: Long) {
+        val cv = ContentValues().apply {
+            put("zone_id", zoneId)
+            put("forecast_json", forecastJson)
+            put("fetched_at", fetchedAt)
+        }
+        writableDatabase.insertWithOnConflict("weather_cache", null, cv, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    // ====== Adventure Pack: Ride Summary Stats for Recap Poster ======
+
+    fun getRideSummaryStats(): RideSummaryStats {
+        val db = readableDatabase
+        var totalKm = 0.0
+        var maxSpeed = 0f
+        var maxAlt = 0
+        var count = 0
+
+        val sessionCursor = db.rawQuery(
+            "SELECT COALESCE(SUM(total_distance_km), 0), COALESCE(MAX(max_speed_kmh), 0), COALESCE(MAX(max_altitude), 0), COUNT(*) FROM ride_sessions",
+            null
+        )
+        if (sessionCursor.moveToFirst()) {
+            totalKm = sessionCursor.getDouble(0)
+            maxSpeed = sessionCursor.getFloat(1)
+            maxAlt = sessionCursor.getDouble(2).toInt()
+            count = sessionCursor.getInt(3)
+        }
+        sessionCursor.close()
+
+        val rawPoints = mutableListOf<Pair<Double, Double>>()
+        val ptCursor = db.rawQuery(
+            "SELECT lat, lng, altitude, speed FROM ride_points ORDER BY id ASC",
+            null
+        )
+        var prevPt: Pair<Double, Double>? = null
+        var pointSumKm = 0.0
+        while (ptCursor.moveToNext()) {
+            val lat = ptCursor.getDouble(0)
+            val lng = ptCursor.getDouble(1)
+            val alt = ptCursor.getDouble(2).toInt()
+            val spd = ptCursor.getFloat(3)
+            if (alt > maxAlt) maxAlt = alt
+            if (spd > maxSpeed) maxSpeed = spd
+            val prev = prevPt
+            if (prev != null) {
+                val d = com.reed.hagianggo.domain.LocationMath.calculateDistanceKm(prev.first, prev.second, lat, lng)
+                if (d in 0.005..5.0) pointSumKm += d
+            }
+            prevPt = Pair(lat, lng)
+            rawPoints.add(Pair(lat, lng))
+        }
+        ptCursor.close()
+
+        val sampled = if (rawPoints.size <= 350) {
+            rawPoints
+        } else {
+            val step = (rawPoints.size / 350).coerceAtLeast(1)
+            rawPoints.filterIndexed { index, _ -> index % step == 0 || index == rawPoints.lastIndex }
+        }
+
+        return RideSummaryStats(
+            totalRecordedKm = maxOf(totalKm, pointSumKm),
+            maxRecordedSpeedKmh = maxSpeed,
+            maxRecordedAltitudeM = maxAlt,
+            sessionCount = count,
+            allTrackPoints = sampled
+        )
     }
 }

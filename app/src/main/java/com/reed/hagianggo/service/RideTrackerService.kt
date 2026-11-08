@@ -2,15 +2,19 @@ package com.reed.hagianggo.service
 
 import android.annotation.SuppressLint
 import android.app.*
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Build
 import android.os.IBinder
+import android.os.Looper
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import com.reed.hagianggo.MainActivity
 import com.reed.hagianggo.data.HaGiangDatabase
 import com.reed.hagianggo.domain.LocationMath
@@ -43,6 +47,20 @@ class RideTrackerService : Service(), LocationListener {
 
     private val recentPoints = mutableListOf<Pair<Double, Double>>()
     private var cachedPlaces: List<Place> = emptyList()
+    private var isProviderReceiverRegistered = false
+
+    private val providerSwitchReceiver = object : BroadcastReceiver() {
+        override fun onReceive(ctx: Context?, intent: Intent?) {
+            val action = intent?.action ?: return
+            if (action == LocationManager.PROVIDERS_CHANGED_ACTION ||
+                action == LocationManager.MODE_CHANGED_ACTION
+            ) {
+                if (_liveRideState.value.isTracking && !isPaused) {
+                    bindRideLocationUpdates()
+                }
+            }
+        }
+    }
 
     companion object {
         const val CHANNEL_ID = "hagiang_ride_tracker"
@@ -136,21 +154,65 @@ class RideTrackerService : Service(), LocationListener {
             sessionId = currentSessionId
         )
 
-        // Lắng nghe GPS liên tục
-        val lm = locationManager
-        if (lm != null) {
+        // Lắng nghe bật/tắt GPS giữa chừng & đăng ký cập nhật GPS liên tục
+        if (!isProviderReceiverRegistered) {
             try {
-                if (lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                    lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 3000L, 5f, this)
+                val filter = IntentFilter().apply {
+                    addAction(LocationManager.PROVIDERS_CHANGED_ACTION)
+                    addAction(LocationManager.MODE_CHANGED_ACTION)
                 }
-                if (lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                    lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 5000L, 10f, this)
-                }
+                ContextCompat.registerReceiver(
+                    this,
+                    providerSwitchReceiver,
+                    filter,
+                    ContextCompat.RECEIVER_NOT_EXPORTED
+                )
+                isProviderReceiverRegistered = true
             } catch (_: Exception) {}
         }
+        bindRideLocationUpdates()
 
         // Bắt đầu ticker tính thời gian trôi qua mỗi giây
         startTimer()
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun bindRideLocationUpdates() {
+        val lm = locationManager ?: return
+        try {
+            try {
+                lm.removeUpdates(this)
+            } catch (_: Exception) {}
+
+            val all = lm.allProviders
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                all.contains(LocationManager.FUSED_PROVIDER)
+            ) {
+                lm.requestLocationUpdates(LocationManager.FUSED_PROVIDER, 2500L, 4f, this, Looper.getMainLooper())
+            }
+            if (all.contains(LocationManager.GPS_PROVIDER)) {
+                lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 2500L, 4f, this, Looper.getMainLooper())
+            }
+            if (all.contains(LocationManager.NETWORK_PROVIDER)) {
+                lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 5000L, 10f, this, Looper.getMainLooper())
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val exec = ContextCompat.getMainExecutor(this)
+                if (lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                    lm.getCurrentLocation(LocationManager.GPS_PROVIDER, null, exec) { loc ->
+                        if (loc != null) onLocationChanged(loc)
+                    }
+                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                    all.contains(LocationManager.FUSED_PROVIDER) &&
+                    lm.isProviderEnabled(LocationManager.FUSED_PROVIDER)
+                ) {
+                    lm.getCurrentLocation(LocationManager.FUSED_PROVIDER, null, exec) { loc ->
+                        if (loc != null) onLocationChanged(loc)
+                    }
+                }
+            }
+        } catch (_: Exception) {}
     }
 
     private fun pauseTracking() {
@@ -167,6 +229,12 @@ class RideTrackerService : Service(), LocationListener {
 
     private fun stopTracking() {
         locationManager?.removeUpdates(this)
+        if (isProviderReceiverRegistered) {
+            try {
+                unregisterReceiver(providerSwitchReceiver)
+            } catch (_: Exception) {}
+            isProviderReceiverRegistered = false
+        }
         serviceScope.cancel()
 
         serviceScope.launch(Dispatchers.IO) {
@@ -220,11 +288,13 @@ class RideTrackerService : Service(), LocationListener {
         if (altitudeMeters in 1.0..minAltitude) minAltitude = altitudeMeters
 
         // Tính khoảng cách di chuyển
+        var deltaKmMoved = 0.0
         val prev = lastLocation
         if (prev != null) {
             val dist = LocationMath.calculateDistanceKm(prev.latitude, prev.longitude, lat, lng)
             if (dist in 0.008..5.0) { // Lọc nhiễu < 8m và teleport > 5km
                 totalDistanceKm += dist
+                deltaKmMoved = dist
             }
         }
         lastLocation = location
@@ -237,6 +307,9 @@ class RideTrackerService : Service(), LocationListener {
 
         // Ghi điểm vào SQLite
         serviceScope.launch(Dispatchers.IO) {
+            if (deltaKmMoved > 0.0) {
+                database.deductFuelKm(deltaKmMoved)
+            }
             database.insertRidePoint(
                 RidePoint(
                     sessionId = currentSessionId,
@@ -351,6 +424,12 @@ class RideTrackerService : Service(), LocationListener {
     override fun onDestroy() {
         super.onDestroy()
         locationManager?.removeUpdates(this)
+        if (isProviderReceiverRegistered) {
+            try {
+                unregisterReceiver(providerSwitchReceiver)
+            } catch (_: Exception) {}
+            isProviderReceiverRegistered = false
+        }
         serviceScope.cancel()
     }
 }

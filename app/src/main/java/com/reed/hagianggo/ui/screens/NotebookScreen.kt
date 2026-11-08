@@ -74,10 +74,14 @@ fun NotebookScreen(
     val checklist by viewModel.checklist.collectAsState()
     val journal by viewModel.journal.collectAsState()
     val zones by viewModel.zones.collectAsState()
+    val members by viewModel.members.collectAsState()
+    val memberBalances by viewModel.memberBalances.collectAsState()
+    val settlementTransfers by viewModel.settlementTransfers.collectAsState()
 
     var selectedSubTab by remember { mutableIntStateOf(0) } // 0: Chi tiêu, 1: Checklist, 2: Nhật ký, 3: Sao lưu
 
     var showAddExpenseDialog by remember { mutableStateOf(false) }
+    var showAddMemberDialog by remember { mutableStateOf(false) }
     var showAddChecklistDialog by remember { mutableStateOf(false) }
     var showAddJournalDialog by remember { mutableStateOf(false) }
     var showImportJsonDialog by remember { mutableStateOf(false) }
@@ -149,9 +153,20 @@ fun NotebookScreen(
                 0 -> ExpenseTabContent(
                     expenses = expenses,
                     tripConfig = tripConfig,
+                    members = members,
+                    memberBalances = memberBalances,
+                    settlementTransfers = settlementTransfers,
                     bottomClearance = bottomClearance,
                     onAddExpenseClick = { showAddExpenseDialog = true },
-                    onDeleteExpense = { viewModel.deleteExpense(it) }
+                    onDeleteExpense = { viewModel.deleteExpense(it) },
+                    onAddMemberClick = { showAddMemberDialog = true },
+                    onRemoveMember = { viewModel.removeTripMember(it) },
+                    onCopySplitSummary = {
+                        val summary = viewModel.buildSplitbillSummaryText()
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        clipboard.setPrimaryClip(ClipData.newPlainText("HaGiangGo_Splitbill", summary))
+                        viewModel.notifyMessage("Đã sao chép bảng chia tiền nhóm để dán vào Zalo!")
+                    }
                 )
                 1 -> ChecklistTabContent(
                     checklist = checklist,
@@ -165,10 +180,12 @@ fun NotebookScreen(
                     zones = zones,
                     bottomClearance = bottomClearance,
                     onAddJournalClick = { showAddJournalDialog = true },
-                    onDeleteJournal = { viewModel.deleteJournalEntry(it) }
+                    onDeleteJournal = { viewModel.deleteJournalEntry(it) },
+                    onOpenRecapPoster = { viewModel.openRecapSheet() }
                 )
                 else -> BackupTabContent(
                     bottomClearance = bottomClearance,
+                    onOpenRecapPoster = { viewModel.openRecapSheet() },
                     onExportJson = {
                         val json = viewModel.exportBackupJson()
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -190,10 +207,64 @@ fun NotebookScreen(
     if (showAddExpenseDialog) {
         AddExpenseDialog(
             durationDays = tripConfig.durationDays,
+            members = members,
             onDismiss = { showAddExpenseDialog = false },
-            onConfirm = { amount, category, title, day ->
-                viewModel.addExpense(amount, category, title, day)
+            onConfirm = { amount, category, title, day, paidById, splitIds ->
+                viewModel.addExpense(amount, category, title, day, paidById, splitIds)
                 showAddExpenseDialog = false
+            }
+        )
+    }
+
+    // Dialog Thêm Thành Viên Nhóm Phượt (Splitbill)
+    if (showAddMemberDialog) {
+        var memberName by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showAddMemberDialog = false },
+            shape = RoundedCornerShape(22.dp),
+            containerColor = SurfaceWhite,
+            title = {
+                Text(
+                    "Thêm bạn đồng hành",
+                    color = TextPrimary,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                )
+            },
+            text = {
+                OutlinedTextField(
+                    value = memberName,
+                    onValueChange = { memberName = it },
+                    label = { Text("Tên thành viên (VD: Hùng, Minh, Lan)", color = TextSecondary) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = SurfaceWhite,
+                        unfocusedContainerColor = SurfaceWhite,
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary,
+                        focusedBorderColor = ElectricOrange,
+                        unfocusedBorderColor = BorderMedium
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                ShadcnButton(
+                    onClick = {
+                        if (memberName.isNotBlank()) {
+                            viewModel.addTripMember(memberName)
+                            showAddMemberDialog = false
+                        }
+                    },
+                    variant = ShadcnButtonVariant.Primary
+                ) {
+                    Text("Thêm vào đoàn")
+                }
+            },
+            dismissButton = {
+                ShadcnButton(onClick = { showAddMemberDialog = false }, variant = ShadcnButtonVariant.Ghost) {
+                    Text("Hủy", color = TextSecondary)
+                }
             }
         )
     }
@@ -343,11 +414,18 @@ private fun NotebookFloatingActionPill(
 fun ExpenseTabContent(
     expenses: List<Expense>,
     tripConfig: TripConfig,
+    members: List<TripMember>,
+    memberBalances: List<MemberBalance>,
+    settlementTransfers: List<SettlementTransfer>,
     bottomClearance: Dp,
     onAddExpenseClick: () -> Unit,
-    onDeleteExpense: (Long) -> Unit
+    onDeleteExpense: (Long) -> Unit,
+    onAddMemberClick: () -> Unit,
+    onRemoveMember: (String) -> Unit,
+    onCopySplitSummary: () -> Unit
 ) {
     val currencyFormatter = remember { NumberFormat.getNumberInstance(Locale.forLanguageTag("vi-VN")) }
+    val membersById = remember(members) { members.associateBy { it.id } }
     val totalSpent = remember(expenses) { expenses.sumOf { it.amount } }
     val groupTotals = remember(expenses) {
         expenses.groupBy { it.category }.mapValues { (_, list) -> list.sumOf { it.amount } }
@@ -560,6 +638,149 @@ fun ExpenseTabContent(
                 }
             }
 
+            // 2B. Thẻ Thành viên Đoàn & Chia tiền Thông minh (Smart Group Splitbill)
+            item(key = "group_splitbill_card") {
+                ShadcnCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    backgroundColor = SurfaceWhite,
+                    borderColor = if (members.size >= 2) SkyTelemetryBorder else BorderSubtle
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.Groups,
+                                    contentDescription = null,
+                                    tint = SkyTelemetry,
+                                    modifier = Modifier.size(19.dp)
+                                )
+                                Spacer(modifier = Modifier.width(7.dp))
+                                Text(
+                                    text = if (members.size >= 2) "CHIA TIỀN NHÓM (${members.size} NGƯỜI)"
+                                    else "CHẾ ĐỘ ĐỘC HÀNH (SOLO)",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = TextPrimary
+                                )
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .background(ElectricOrangeSoft)
+                                    .border(BorderStroke(1.dp, ElectricOrangeBorder), CircleShape)
+                                    .springClickable(onClick = onAddMemberClick)
+                                    .padding(horizontal = 10.dp, vertical = 5.dp)
+                            ) {
+                                Text(
+                                    text = "+ Thêm bạn",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = ElectricOrangeHover
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        if (members.size < 2) {
+                            Text(
+                                text = "Đi theo nhóm bạn bè? Chạm '+ Thêm bạn' để tự động tính ai ứng trước và chốt số lần chuyển khoản ít nhất cuối chuyến.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextSecondary
+                            )
+                        } else {
+                            // Danh sách thành viên & Cân đối ròng
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                memberBalances.forEach { mb ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(SurfaceMuted)
+                                            .padding(horizontal = 10.dp, vertical = 7.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = if (mb.member.isMe) "👤 ${mb.member.name} (Bạn)" else "👤 ${mb.member.name}",
+                                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                                color = TextPrimary
+                                            )
+                                            if (!mb.member.isMe) {
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Icon(
+                                                    Icons.Default.Close,
+                                                    contentDescription = "Xóa",
+                                                    tint = TextMuted,
+                                                    modifier = Modifier
+                                                        .size(14.dp)
+                                                        .clickable { onRemoveMember(mb.member.id) }
+                                                )
+                                            }
+                                        }
+                                        val net = mb.netBalance
+                                        val sign = if (net > 0) "+" else ""
+                                        Text(
+                                            text = "$sign${currencyFormatter.format(net)} đ",
+                                            style = TelemetryTextStyle.copy(fontSize = 12.sp),
+                                            color = when {
+                                                net > 500L -> EmeraldGreenText
+                                                net < -500L -> RoseDestructiveText
+                                                else -> TextMuted
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+
+                            if (settlementTransfers.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(EmeraldGreenSoft.copy(alpha = 0.65f))
+                                        .border(BorderStroke(1.dp, EmeraldGreenBorder), RoundedCornerShape(12.dp))
+                                        .padding(10.dp)
+                                ) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text(
+                                            text = "💸 CÁCH CHUYỂN KHOẢN GỌN NHẤT:",
+                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                            color = EmeraldGreenText
+                                        )
+                                        settlementTransfers.forEach { tr ->
+                                            Text(
+                                                text = "➡️ ${tr.fromMemberName} chuyển cho ${tr.toMemberName}: ${currencyFormatter.format(tr.amount)} đ",
+                                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                                color = TextPrimary
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+                            ShadcnButton(
+                                onClick = onCopySplitSummary,
+                                variant = ShadcnButtonVariant.Secondary,
+                                modifier = Modifier.fillMaxWidth().height(36.dp)
+                            ) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Sao chép bảng chia tiền gửi Zalo", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
+                }
+            }
+
             item {
                 Text(
                     text = "LỊCH SỬ CHI TIÊU (${expenses.size})",
@@ -628,8 +849,15 @@ fun ExpenseTabContent(
                                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                                     color = TextPrimary
                                 )
+                                val payerName = membersById[item.paidByMemberId]?.name ?: "Tôi"
+                                val subtitleText = if (members.size >= 2) {
+                                    val splitCount = if (item.splitAmongIds.isEmpty()) members.size else item.splitAmongIds.size
+                                    "${item.category.label} • Ngày ${item.dayNumber} • Trả: $payerName (Chia $splitCount)"
+                                } else {
+                                    "${item.category.label} • Ngày ${item.dayNumber}"
+                                }
                                 Text(
-                                    "${item.category.label} • Ngày ${item.dayNumber}",
+                                    subtitleText,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = TextSecondary
                                 )
@@ -879,7 +1107,8 @@ fun JournalTabContent(
     zones: List<Zone>,
     bottomClearance: Dp,
     onAddJournalClick: () -> Unit,
-    onDeleteJournal: (Long) -> Unit
+    onDeleteJournal: (Long) -> Unit,
+    onOpenRecapPoster: () -> Unit = {}
 ) {
     val zonesById = remember(zones) { zones.associateBy { it.id } }
     val dateFormatter = remember { SimpleDateFormat("HH:mm • dd/MM", Locale.getDefault()) }
@@ -895,6 +1124,50 @@ fun JournalTabContent(
             ),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            item(key = "journal_poster_banner") {
+                ShadcnCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    backgroundColor = ElectricOrangeSoft,
+                    borderColor = ElectricOrangeBorder,
+                    onClick = onOpenRecapPoster
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(ElectricOrange),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.AutoAwesomeMotion, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "TẠO POSTER TỔNG KẾT CHUYẾN ĐI",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Black),
+                                    color = ElectricOrangeHover
+                                )
+                                Text(
+                                    text = "Bản đồ vòng cung + Cột mốc đã ghé + Đỉnh cao độ",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSecondary
+                                )
+                            }
+                        }
+                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = ElectricOrangeHover)
+                    }
+                }
+            }
+
             item {
                 Text(
                     text = "NHẬT KÝ HÀNH TRÌNH (${journal.size} ghi chép)",
@@ -1045,6 +1318,7 @@ fun JournalTabContent(
 @Composable
 fun BackupTabContent(
     bottomClearance: Dp,
+    onOpenRecapPoster: () -> Unit = {},
     onExportJson: () -> Unit,
     onOpenImportDialog: () -> Unit
 ) {
@@ -1053,6 +1327,20 @@ fun BackupTabContent(
         contentPadding = PaddingValues(16.dp, 10.dp, 16.dp, bottomClearance + 24.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
+        item {
+            ShadcnButton(
+                onClick = onOpenRecapPoster,
+                variant = ShadcnButtonVariant.Secondary,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+            ) {
+                Icon(Icons.Default.AutoAwesomeMotion, contentDescription = null, tint = ElectricOrangeHover, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Xuất Poster Ảnh Tổng kết Hành trình (PNG)", fontWeight = FontWeight.Bold, color = ElectricOrangeHover)
+            }
+        }
+
         item {
             ShadcnCard(
                 modifier = Modifier.fillMaxWidth(),
@@ -1131,13 +1419,16 @@ fun BackupTabContent(
 @Composable
 fun AddExpenseDialog(
     durationDays: Int,
+    members: List<TripMember> = listOf(TripMember("me", "Tôi", isMe = true)),
     onDismiss: () -> Unit,
-    onConfirm: (amount: Long, category: ExpenseCategory, title: String, day: Int) -> Unit
+    onConfirm: (amount: Long, category: ExpenseCategory, title: String, day: Int, paidByMemberId: String, splitAmongIds: List<String>) -> Unit
 ) {
     var amountText by remember { mutableStateOf("") }
     var title by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf(ExpenseCategory.FOOD) }
     var selectedDay by remember { mutableIntStateOf(1) }
+    var paidByMemberId by remember { mutableStateOf(members.firstOrNull()?.id ?: "me") }
+    var splitMemberIds by remember(members) { mutableStateOf(members.map { it.id }.toSet()) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1218,6 +1509,65 @@ fun AddExpenseDialog(
                         }
                     }
                 }
+
+                if (members.size >= 2) {
+                    Text("Ai trả tiền khoản này?", style = MaterialTheme.typography.labelSmall, color = TextMuted)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        members.forEach { m ->
+                            val isPayer = paidByMemberId == m.id
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(if (isPayer) EmeraldGreenSoft else SurfaceMuted)
+                                    .border(BorderStroke(1.dp, if (isPayer) EmeraldGreenBorder else BorderSubtle), RoundedCornerShape(10.dp))
+                                    .springClickable { paidByMemberId = m.id }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = m.name,
+                                    fontSize = 11.sp,
+                                    color = if (isPayer) EmeraldGreenText else TextSecondary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+
+                    Text("Chia đều cho ai?", style = MaterialTheme.typography.labelSmall, color = TextMuted)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        members.forEach { m ->
+                            val isIncluded = m.id in splitMemberIds
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(if (isIncluded) SkyTelemetrySoft else SurfaceMuted)
+                                    .border(BorderStroke(1.dp, if (isIncluded) SkyTelemetryBorder else BorderSubtle), RoundedCornerShape(10.dp))
+                                    .springClickable {
+                                        val next = if (isIncluded && splitMemberIds.size > 1) {
+                                            splitMemberIds - m.id
+                                        } else {
+                                            splitMemberIds + m.id
+                                        }
+                                        splitMemberIds = next
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = if (isIncluded) "✓ ${m.name}" else m.name,
+                                    fontSize = 11.sp,
+                                    color = if (isIncluded) SkyTelemetry else TextSecondary,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
@@ -1225,7 +1575,14 @@ fun AddExpenseDialog(
                 onClick = {
                     val amount = amountText.toLongOrNull() ?: 0L
                     if (amount > 0 && title.isNotBlank()) {
-                        onConfirm(amount, selectedCategory, title.trim(), selectedDay)
+                        onConfirm(
+                            amount,
+                            selectedCategory,
+                            title.trim(),
+                            selectedDay,
+                            paidByMemberId,
+                            splitMemberIds.toList()
+                        )
                     }
                 },
                 variant = ShadcnButtonVariant.Primary

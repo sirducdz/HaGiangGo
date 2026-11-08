@@ -44,6 +44,11 @@ class MainActivity : ComponentActivity() {
 
     private val viewModel: MainViewModel by viewModels()
 
+    override fun onResume() {
+        super.onResume()
+        viewModel.onAppResumed()
+    }
+
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -59,8 +64,23 @@ class MainActivity : ComponentActivity() {
                 val isPlaceFormOpen by viewModel.isPlaceFormOpen.collectAsState()
                 val editingPlace by viewModel.editingPlace.collectAsState()
                 val zones by viewModel.zones.collectAsState()
+                val places by viewModel.places.collectAsState()
+                val tripConfig by viewModel.tripConfig.collectAsState()
+                val expenses by viewModel.expenses.collectAsState()
+                val journal by viewModel.journal.collectAsState()
+                val fuelState by viewModel.fuelState.collectAsState()
+                val fuelAdvisory by viewModel.fuelAdvisory.collectAsState()
+                val rideStats by viewModel.rideStats.collectAsState()
+                val offlineMapStatus by viewModel.offlineMapStatus.collectAsState()
+                val weatherForecasts by viewModel.weatherForecasts.collectAsState()
+                val isWeatherSyncing by viewModel.isWeatherSyncing.collectAsState()
+                val isSosSheetOpen by viewModel.isSosSheetOpen.collectAsState()
+                val isWeatherSheetOpen by viewModel.isWeatherSheetOpen.collectAsState()
+                val isRecapSheetOpen by viewModel.isRecapSheetOpen.collectAsState()
+                val isOfflineMapDialogOpen by viewModel.isOfflineMapDialogOpen.collectAsState()
                 val activeZone by viewModel.activeZone.collectAsState()
                 val currentLocation by viewModel.currentLocation.collectAsState()
+                val isGpsEnabled by viewModel.isGpsEnabled.collectAsState()
                 val isOutsideHaGiang by viewModel.isOutsideHaGiang.collectAsState()
                 val liveRideState by viewModel.liveRideState.collectAsState()
                 val isCockpitOpen by viewModel.isCockpitOpen.collectAsState()
@@ -146,7 +166,7 @@ class MainActivity : ComponentActivity() {
                         } else {
                             activeZone?.elevationMeters ?: 120
                         },
-                        isGpsLive = currentLocation != null,
+                        isGpsLive = isGpsEnabled && currentLocation != null,
                         isOutsideHaGiang = isOutsideHaGiang,
                         isTrackingRide = liveRideState.isTracking,
                         currentSpeedKmh = liveRideState.currentSpeedKmh,
@@ -262,10 +282,74 @@ class MainActivity : ComponentActivity() {
                 if (isCockpitOpen) {
                     LiveRideCockpitSheet(
                         state = liveRideState,
+                        fuelState = fuelState,
+                        fuelAdvisory = fuelAdvisory,
+                        onRefuelFull = { viewModel.markTankRefueled() },
+                        onOpenSos = {
+                            viewModel.closeCockpit()
+                            viewModel.openSosSheet()
+                        },
                         onPause = { viewModel.pauseRide() },
                         onResume = { viewModel.resumeRide() },
                         onStop = { viewModel.stopRide() },
                         onDismiss = { viewModel.closeCockpit() }
+                    )
+                }
+
+                // Bottom Sheet: Cứu hộ đèo núi & Phát tọa độ SMS sóng 2G
+                if (isSosSheetOpen) {
+                    MountainSosSheet(
+                        currentLat = currentLocation?.first,
+                        currentLng = currentLocation?.second,
+                        isGpsLive = isGpsEnabled && currentLocation != null,
+                        currentAltitudeM = if (liveRideState.isTracking && liveRideState.currentAltitude > 10) {
+                            liveRideState.currentAltitude.toInt()
+                        } else {
+                            activeZone?.elevationMeters ?: 120
+                        },
+                        activeZone = activeZone,
+                        places = places,
+                        emergencyPhone = fuelState.emergencyContactPhone,
+                        onSaveEmergencyPhone = { phone -> viewModel.saveEmergencyPhone(phone) },
+                        onNotify = { msg -> viewModel.notifyMessage(msg) },
+                        onDismiss = { viewModel.closeSosSheet() }
+                    )
+                }
+
+                // Bottom Sheet: Dự báo thời tiết đèo cao & Tỷ lệ săn mây 8 cụm
+                if (isWeatherSheetOpen) {
+                    WeatherCloudSheet(
+                        zones = zones,
+                        activeZone = activeZone,
+                        forecasts = weatherForecasts,
+                        isSyncing = isWeatherSyncing,
+                        onSyncNow = { viewModel.syncMountainWeatherNow() },
+                        onApplyToWhatNow = { zone, fc -> viewModel.applyZoneWeatherToWhatNow(zone, fc) },
+                        onDismiss = { viewModel.closeWeatherSheet() }
+                    )
+                }
+
+                // Bottom Sheet: Xuất Poster Tổng kết Chuyến đi (Strava × Polarsteps)
+                if (isRecapSheetOpen) {
+                    TripRecapSheet(
+                        tripConfig = tripConfig,
+                        zones = zones,
+                        places = places,
+                        expenses = expenses,
+                        journalCount = journal.size,
+                        rideStats = rideStats,
+                        onNotify = { msg -> viewModel.notifyMessage(msg) },
+                        onDismiss = { viewModel.closeRecapSheet() }
+                    )
+                }
+
+                // Dialog: Tải gói Bản đồ Offline lưu vĩnh viễn vào filesDir
+                if (isOfflineMapDialogOpen) {
+                    OfflineMapPackDialog(
+                        status = offlineMapStatus,
+                        onStartDownload = { viewModel.startOfflineMapDownload() },
+                        onCancelDownload = { viewModel.cancelOfflineMapDownload() },
+                        onDismiss = { viewModel.closeOfflineMapDialog() }
                     )
                 }
             }

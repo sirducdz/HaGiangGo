@@ -34,6 +34,10 @@ import java.util.Locale
 @Composable
 fun LiveRideCockpitSheet(
     state: LiveRideState,
+    fuelState: FuelState = FuelState(),
+    fuelAdvisory: FuelAdvisory? = null,
+    onRefuelFull: () -> Unit = {},
+    onOpenSos: () -> Unit = {},
     onPause: () -> Unit,
     onResume: () -> Unit,
     onStop: () -> Unit,
@@ -237,6 +241,57 @@ fun LiveRideCockpitSheet(
                             color = ElectricOrangeHover
                         )
                     }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // 3b. Thanh Cảnh báo Tầm Xăng & Nút Khẩn cấp SOS trên Buồng lái
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val isLowFuel = fuelAdvisory?.isCriticalLow == true
+                ShadcnCard(
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(16.dp),
+                    backgroundColor = if (isLowFuel) AmberWarningSoft else SurfaceWhite,
+                    borderColor = if (isLowFuel) AmberWarningBorder else BorderSubtle,
+                    onClick = onRefuelFull
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = if (isLowFuel) "⚠ SẮP HẾT TẦM XĂNG" else "⛽ TẦM XĂNG CÒN LẠI",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = if (isLowFuel) AmberWarningText else TextMuted
+                            )
+                            Text(
+                                text = "~${fuelState.remainingKm.toInt()} / ${fuelState.maxRangeKm} km (Chạm khi đổ đầy)",
+                                style = TelemetryTextStyle.copy(fontSize = 12.5.sp),
+                                color = TextPrimary
+                            )
+                        }
+                        Icon(Icons.Default.LocalGasStation, contentDescription = null, tint = AmberWarningText, modifier = Modifier.size(18.dp))
+                    }
+                }
+
+                ShadcnButton(
+                    onClick = onOpenSos,
+                    variant = ShadcnButtonVariant.Destructive,
+                    modifier = Modifier.height(52.dp),
+                    contentPadding = PaddingValues(horizontal = 14.dp)
+                ) {
+                    Icon(Icons.Default.Sos, contentDescription = "SOS", modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("SOS", fontWeight = FontWeight.Black)
                 }
             }
 

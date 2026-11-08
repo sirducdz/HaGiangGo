@@ -1,8 +1,10 @@
 package com.reed.hagianggo.ui.components
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.*
 import android.graphics.drawable.BitmapDrawable
+import android.provider.Settings
 import android.view.MotionEvent
 import android.view.View
 import androidx.compose.animation.AnimatedVisibility
@@ -35,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.reed.hagianggo.domain.LocationMath
+import com.reed.hagianggo.domain.OfflineMapManager
 import com.reed.hagianggo.model.*
 import com.reed.hagianggo.ui.theme.*
 import org.osmdroid.config.Configuration
@@ -165,6 +168,8 @@ fun RealMapView(
     places: List<Place>,
     currentLat: Double?,
     currentLng: Double?,
+    isGpsEnabled: Boolean = true,
+    onRequestMyLocation: (() -> Unit)? = null,
     focusedZone: Zone? = null,
     focusedPlace: Place? = null,
     visibleMapHeightFraction: Float = 1.0f,
@@ -174,6 +179,9 @@ fun RealMapView(
     trackPoints: List<Pair<Double, Double>> = emptyList(),
     isMapFullscreen: Boolean = false,
     onToggleFullscreen: (() -> Unit)? = null,
+    offlineMapStatus: OfflineMapStatus? = null,
+    onOpenOfflineMapPack: (() -> Unit)? = null,
+    onOpenSos: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -181,6 +189,17 @@ fun RealMapView(
     var isTopoMode by remember { mutableStateOf(false) }
     var mapViewInstance by remember { mutableStateOf<MapView?>(null) }
     var hasMounted by remember { mutableStateOf(false) }
+    var pendingFlyToUser by remember { mutableStateOf(false) }
+
+    // Tự động bay tới vị trí người dùng ngay khi GPS vừa bắt được tọa độ sau khi bật Vị trí
+    LaunchedEffect(currentLat, currentLng, isGpsEnabled) {
+        if (pendingFlyToUser && isGpsEnabled && currentLat != null && currentLng != null) {
+            pendingFlyToUser = false
+            val targetZoom = 14.5
+            val adjLat = offsetLatForSheet(currentLat, targetZoom, visibleMapHeightFraction)
+            mapViewInstance?.controller?.animateTo(GeoPoint(adjLat, currentLng), targetZoom, 750L)
+        }
+    }
 
     // Biến ghi nhớ danh sách places đã add vào overlays (gồm cả lat/lng) để tự động cập nhật ghim khi đổi tọa độ
     var lastPlacesKey by remember { mutableStateOf("") }
@@ -232,17 +251,10 @@ fun RealMapView(
         }
     }
 
-    // Cấu hình OSMDroid tối ưu hiệu năng
-    LaunchedEffect(Unit) {
-        Configuration.getInstance().apply {
-            userAgentValue = context.packageName
-            osmdroidBasePath = File(context.filesDir, "osmdroid")
-            osmdroidTileCache = File(context.cacheDir, "osmdroid/tiles")
-            cacheMapTileCount = 40.toShort()
-            tileDownloadThreads = 4
-            tileFileSystemCacheMaxBytes = 350L * 1024 * 1024
-            tileFileSystemCacheTrimBytes = 300L * 1024 * 1024
-        }
+    // Cấu hình OSMDroid lưu vĩnh viễn vào filesDir (không bao giờ bị trình dọn rác xóa)
+    remember(context) {
+        OfflineMapManager.configureOsmDroid(context)
+        true
     }
 
     Box(
@@ -253,9 +265,11 @@ fun RealMapView(
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
+                OfflineMapManager.configureOsmDroid(ctx)
                 TouchableMapView(ctx).apply {
                     mapViewInstance = this
                     setLayerType(View.LAYER_TYPE_HARDWARE, null)
+                    setUseDataConnection(OfflineMapManager.hasValidatedInternet(ctx))
                     setTileSource(if (isTopoMode) TileSourceFactory.OpenTopo else TileSourceFactory.MAPNIK)
                     setMultiTouchControls(true)
                     isFlingEnabled = true
@@ -337,6 +351,12 @@ fun RealMapView(
                 }
             },
             update = { mapView ->
+                // Tự động ngắt kết nối mạng của MapView khi rớt mạng / sóng 2G ảo để đọc cache 0ms không treo
+                val hasInternet = OfflineMapManager.hasValidatedInternet(context)
+                if (mapView.useDataConnection() != hasInternet) {
+                    mapView.setUseDataConnection(hasInternet)
+                }
+
                 // Chỉ đổi tile source khi người dùng bấm nút đổi layer
                 val currentTileSource = if (isTopoMode) TileSourceFactory.OpenTopo else TileSourceFactory.MAPNIK
                 if (mapView.tileProvider.tileSource != currentTileSource) {
@@ -365,12 +385,13 @@ fun RealMapView(
 
                 // Cập nhật vị trí GPS người dùng (không xóa overlay, chỉ set position mượt mà)
                 myLocationMarkerRef?.let { marker ->
-                    if (currentLat != null && currentLng != null) {
+                    if (isGpsEnabled && currentLat != null && currentLng != null) {
                         marker.position = GeoPoint(currentLat, currentLng)
                         marker.isEnabled = true
                     } else {
                         marker.isEnabled = false
                     }
+                    mapView.invalidate()
                 }
 
                 // Cập nhật vệt đường polyline (nếu có điểm mới)
@@ -399,8 +420,18 @@ fun RealMapView(
                     .background(SurfaceGlass)
                     .border(BorderStroke(1.dp, BorderSubtle), CircleShape)
                     .springClickable {
-                        if (currentLat != null && currentLng != null) {
-                            mapViewInstance?.controller?.animateTo(GeoPoint(currentLat, currentLng), 14.5, 800L)
+                        onRequestMyLocation?.invoke()
+                        if (isGpsEnabled && currentLat != null && currentLng != null) {
+                            val targetZoom = 14.5
+                            val adjLat = offsetLatForSheet(currentLat, targetZoom, visibleMapHeightFraction)
+                            mapViewInstance?.controller?.animateTo(GeoPoint(adjLat, currentLng), targetZoom, 800L)
+                        } else {
+                            pendingFlyToUser = true
+                            if (!isGpsEnabled) {
+                                try {
+                                    context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                                } catch (_: Exception) {}
+                            }
                         }
                     },
                 contentAlignment = Alignment.Center
@@ -408,7 +439,7 @@ fun RealMapView(
                 Icon(
                     Icons.Default.MyLocation,
                     contentDescription = "Vị trí của tôi",
-                    tint = if (currentLat != null) EmeraldGreenText else TextMuted,
+                    tint = if (isGpsEnabled && currentLat != null) EmeraldGreenText else TextMuted,
                     modifier = Modifier.size(19.dp)
                 )
             }
@@ -458,6 +489,68 @@ fun RealMapView(
                     tint = if (isTopoMode) EmeraldGreenText else TextSecondary,
                     modifier = Modifier.size(19.dp)
                 )
+            }
+
+            // Nút Tải / Kiểm tra Bản đồ Offline vĩnh viễn (filesDir)
+            if (onOpenOfflineMapPack != null) {
+                val isReady = offlineMapStatus?.isReadyOffline == true
+                val isDownloading = offlineMapStatus?.isDownloading == true
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .shadow(8.dp, CircleShape, ambientColor = SoftShadowColor, spotColor = SoftShadowColor)
+                        .clip(CircleShape)
+                        .background(if (isReady) EmeraldGreenSoft else SurfaceGlass)
+                        .border(
+                            BorderStroke(
+                                1.dp,
+                                when {
+                                    isReady -> EmeraldGreenBorder
+                                    isDownloading -> ElectricOrange
+                                    else -> BorderSubtle
+                                }
+                            ),
+                            CircleShape
+                        )
+                        .springClickable(onClick = onOpenOfflineMapPack),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isDownloading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.2.dp,
+                            color = ElectricOrange
+                        )
+                    } else {
+                        Icon(
+                            if (isReady) Icons.Default.OfflinePin else Icons.Default.CloudDownload,
+                            contentDescription = "Bản đồ Offline",
+                            tint = if (isReady) EmeraldGreenText else ElectricOrangeHover,
+                            modifier = Modifier.size(19.dp)
+                        )
+                    }
+                }
+            }
+
+            // Nút Cứu hộ Đèo núi SOS 1 chạm trên bản đồ
+            if (onOpenSos != null) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .shadow(8.dp, CircleShape, ambientColor = SoftShadowColor, spotColor = SoftShadowColor)
+                        .clip(CircleShape)
+                        .background(RoseDestructiveSoft)
+                        .border(BorderStroke(1.dp, RoseDestructiveBorder), CircleShape)
+                        .springClickable(onClick = onOpenSos),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Sos,
+                        contentDescription = "Cứu hộ SOS",
+                        tint = RoseDestructiveText,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
 
             // Nút Phóng to toàn màn hình / Thu nhỏ (nếu truyền callback)

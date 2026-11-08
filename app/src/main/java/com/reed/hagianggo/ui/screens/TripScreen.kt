@@ -67,7 +67,9 @@ fun TripScreen(
     val config by viewModel.tripConfig.collectAsState()
     val expenses by viewModel.expenses.collectAsState()
     val currentLocation by viewModel.currentLocation.collectAsState()
+    val isGpsEnabled by viewModel.isGpsEnabled.collectAsState()
     val liveRideState by viewModel.liveRideState.collectAsState()
+    val offlineMapStatus by viewModel.offlineMapStatus.collectAsState()
 
     var selectedZoneId by remember { mutableStateOf<String?>(null) }
     var focusedPlace by remember { mutableStateOf<Place?>(null) }
@@ -129,6 +131,8 @@ fun TripScreen(
                 places = displayedPlaces,
                 currentLat = currentLocation?.first,
                 currentLng = currentLocation?.second,
+                isGpsEnabled = isGpsEnabled,
+                onRequestMyLocation = { viewModel.requestImmediateMyLocation() },
                 focusedZone = selectedZone,
                 focusedPlace = focusedPlace,
                 visibleMapHeightFraction = visibleMapFraction,
@@ -136,6 +140,9 @@ fun TripScreen(
                 cardBottomPadding = (animatedSheetHeight + 12.dp).coerceAtMost(maxHeight - 180.dp),
                 edgeToEdge = true,
                 trackPoints = liveRideState.recentPoints,
+                offlineMapStatus = offlineMapStatus,
+                onOpenOfflineMapPack = { viewModel.openOfflineMapDialog() },
+                onOpenSos = { viewModel.openSosSheet() },
                 modifier = Modifier.fillMaxSize()
             )
         } else {
@@ -516,6 +523,54 @@ fun TripScreen(
                                         color = if (liveRideState.isTracking) EmeraldGreenText else Color.White
                                     )
                                 }
+                            }
+                        }
+                    }
+
+                    // Dải trạng thái Bản đồ Offline & Cứu hộ nhanh
+                    item(key = "offline_pack_strip") {
+                        ShadcnCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            backgroundColor = if (offlineMapStatus.isReadyOffline) EmeraldGreenSoft.copy(alpha = 0.55f) else ElectricOrangeSoft.copy(alpha = 0.65f),
+                            borderColor = if (offlineMapStatus.isReadyOffline) EmeraldGreenBorder else ElectricOrangeBorder,
+                            shadowElevation = 0.dp,
+                            onClick = { viewModel.openOfflineMapDialog() }
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 9.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                    Icon(
+                                        if (offlineMapStatus.isReadyOffline) Icons.Default.OfflinePin else Icons.Default.CloudDownload,
+                                        contentDescription = null,
+                                        tint = if (offlineMapStatus.isReadyOffline) EmeraldGreenText else ElectricOrangeHover,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column {
+                                        Text(
+                                            text = if (offlineMapStatus.isReadyOffline) "Bản đồ Offline đã sẵn sàng (${String.format(Locale.US, "%.1f", offlineMapStatus.storageSizeMb)} MB)"
+                                            else if (offlineMapStatus.isDownloading) "Đang tải bản đồ Offline (${offlineMapStatus.downloadedTiles}/${offlineMapStatus.totalTiles})..."
+                                            else "Tải gói Bản đồ Offline Hà Giang vĩnh viễn (~24 MB)",
+                                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                            color = TextPrimary
+                                        )
+                                        Text(
+                                            text = "Lưu trong filesDir • Vẫn xem rõ đường đèo khi rớt 4G",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = TextSecondary
+                                        )
+                                    }
+                                }
+                                ShadcnBadge(
+                                    text = if (offlineMapStatus.isReadyOffline) "OFFLINE ✓" else "TẢI NGAY",
+                                    variant = if (offlineMapStatus.isReadyOffline) ShadcnBadgeVariant.Emerald else ShadcnBadgeVariant.Orange
+                                )
                             }
                         }
                     }
