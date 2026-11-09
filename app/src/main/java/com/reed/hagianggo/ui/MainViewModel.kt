@@ -11,6 +11,7 @@ import com.reed.hagianggo.domain.MountainWeatherManager
 import com.reed.hagianggo.domain.OfflineLocationTracker
 import com.reed.hagianggo.domain.OfflineMapManager
 import com.reed.hagianggo.domain.SplitbillEngine
+import com.reed.hagianggo.domain.TimePacerEngine
 import com.reed.hagianggo.domain.WhatNowEngine
 import com.reed.hagianggo.model.*
 import com.reed.hagianggo.service.RideTrackerService
@@ -77,6 +78,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _preferredMapLayer = MutableStateFlow<MapLayerStyle?>(null)
     val preferredMapLayer: StateFlow<MapLayerStyle?> = _preferredMapLayer.asStateFlow()
+
+    // ====== Smart Time Pacer & Pit-Stop Timer State ======
+    private val _dayStartMinutes = MutableStateFlow(7 * 60 + 30) // Mặc định xuất phát 07:30 sáng
+    val dayStartMinutes: StateFlow<Int> = _dayStartMinutes.asStateFlow()
+
+    private val _useCurrentClockForPacer = MutableStateFlow(false)
+    val useCurrentClockForPacer: StateFlow<Boolean> = _useCurrentClockForPacer.asStateFlow()
+
+    private val _skippedTodayPlaceIds = MutableStateFlow<Set<String>>(emptySet())
+    val skippedTodayPlaceIds: StateFlow<Set<String>> = _skippedTodayPlaceIds.asStateFlow()
+
+    private val _activeStopTimer = MutableStateFlow<ActiveStopTimer?>(null)
+    val activeStopTimer: StateFlow<ActiveStopTimer?> = _activeStopTimer.asStateFlow()
 
     // Cụm chặng hiện tại (tính từ override tay hoặc chip GPS)
     val activeZone: StateFlow<Zone?> = combine(
@@ -613,6 +627,126 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun notifyMessage(msg: String) {
         showNotification(msg)
+    }
+
+    // ====== Smart Time Pacer & Pit-Stop Actions ======
+
+    fun setDayStartTime(minutesOfDay: Int) {
+        _useCurrentClockForPacer.value = false
+        _dayStartMinutes.value = minutesOfDay.coerceIn(5 * 60, 15 * 60)
+    }
+
+    fun enableLiveNowPacer(currentClockMinutes: Int) {
+        _useCurrentClockForPacer.value = true
+        _dayStartMinutes.value = currentClockMinutes.coerceIn(5 * 60, 20 * 60)
+        showNotification("⚡ Đã tính lại giờ đến các điểm chưa đi theo đồng hồ hiện tại!")
+    }
+
+    fun toggleSkipPlaceToday(placeId: String) {
+        val current = _skippedTodayPlaceIds.value.toMutableSet()
+        val added = if (placeId in current) {
+            current.remove(placeId)
+            false
+        } else {
+            current.add(placeId)
+            true
+        }
+        _skippedTodayPlaceIds.value = current
+        val placeName = places.value.firstOrNull { it.id == placeId }?.name ?: "địa điểm"
+        if (added) {
+            showNotification("⏭️ Tạm bỏ qua '$placeName' để rút ngắn giờ về trước khi tối.")
+        } else {
+            showNotification("↩️ Đã đưa '$placeName' trở lại lịch trình hôm nay.")
+        }
+    }
+
+    fun adjustPlaceStayDuration(placeId: String, deltaMinutes: Int) {
+        viewModelScope.launch {
+            val place = places.value.firstOrNull { it.id == placeId } ?: return@launch
+            val newDuration = (place.durationMin + deltaMinutes).coerceIn(10, 180)
+            if (newDuration != place.durationMin) {
+                repository.savePlace(place.copy(durationMin = newDuration))
+                val active = _activeStopTimer.value
+                if (active != null && active.placeId == placeId) {
+                    _activeStopTimer.value = active.copy(targetDurationMin = newDuration)
+                }
+            }
+        }
+    }
+
+    fun applySmartAutoTrim(
+        dayStops: List<TimePacerEngine.DayStopInput>,
+        startMinutes: Int,
+        isLiveNowMode: Boolean
+    ) {
+        viewModelScope.launch {
+            val cfg = tripConfig.value
+            val sunsetMin = cfg.sunsetCutoffHour * 60 + cfg.sunsetCutoffMinute
+            val currentSchedule = TimePacerEngine.computeDaySchedule(
+                dayStops = dayStops,
+                vehicle = cfg.vehicle,
+                startMinutesOfDay = startMinutes,
+                isLiveNowMode = isLiveNowMode,
+                skippedPlaceIds = _skippedTodayPlaceIds.value,
+                sunsetCutoffMinutes = sunsetMin
+            )
+            val lastDaytimeIndex = dayStops.indexOfLast {
+                it.slot != TimeSlot.EVENING && it.place.id !in _skippedTodayPlaceIds.value
+            }
+            val enRouteNodes = if (lastDaytimeIndex > 0) {
+                currentSchedule.nodes.take(lastDaytimeIndex)
+            } else {
+                currentSchedule.nodes
+            }
+            val plan = TimePacerEngine.buildAutoTrimPlan(
+                enRouteNodes = enRouteNodes,
+                overtimeMinutes = currentSchedule.overtimeMinutes
+            ) ?: return@launch
+
+            for ((placeId, newMin) in plan.updatedDurations) {
+                val place = places.value.firstOrNull { it.id == placeId }
+                if (place != null) {
+                    repository.savePlace(place.copy(durationMin = newMin))
+                }
+            }
+            if (plan.suggestedSkipIds.isNotEmpty()) {
+                _skippedTodayPlaceIds.value = _skippedTodayPlaceIds.value + plan.suggestedSkipIds
+            }
+            showNotification("✨ Đã tối ưu lịch trình: Tiết kiệm ~${plan.totalSavedMinutes} phút để về trước 17:15!")
+        }
+    }
+
+    fun startPitStopTimer(place: Place) {
+        _activeStopTimer.value = ActiveStopTimer(
+            placeId = place.id,
+            placeName = place.name,
+            startedAtMillis = System.currentTimeMillis(),
+            targetDurationMin = place.durationMin.coerceIn(10, 180)
+        )
+        showNotification("⏱️ Bắt đầu đếm ngược ${place.durationMin} phút dừng tại ${place.name}")
+    }
+
+    fun addPitStopMinutes(extraMin: Int) {
+        val current = _activeStopTimer.value ?: return
+        val newTarget = (current.targetDurationMin + extraMin).coerceIn(10, 180)
+        _activeStopTimer.value = current.copy(targetDurationMin = newTarget)
+        adjustPlaceStayDuration(current.placeId, extraMin)
+        showNotification("⏱️ Đã cộng thêm $extraMin phút tại ${current.placeName}")
+    }
+
+    fun completePitStop(placeId: String) {
+        viewModelScope.launch {
+            val current = places.value.firstOrNull { it.id == placeId }
+            if (current != null && !current.isVisited) {
+                repository.toggleVisited(placeId)
+            }
+            _activeStopTimer.value = null
+            showNotification("✓ Đã hoàn thành điểm dừng ${current?.name ?: ""} • Chuyển sang chặng tiếp!")
+        }
+    }
+
+    fun cancelPitStopTimer() {
+        _activeStopTimer.value = null
     }
 
     private fun showNotification(msg: String) {

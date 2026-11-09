@@ -378,4 +378,45 @@ data class LiveRideState(
     val lastVisitedPlaceName: String? = null
 )
 
+enum class StopPacingStatus {
+    COMPLETED,      // Đã đi qua
+    SKIPPED,        // Tạm bỏ qua hôm nay để kịp giờ
+    ON_TIME,        // Đúng tiến độ an toàn (trước 16:45)
+    NEAR_DUSK,      // Sát giờ chiều muộn (16:45 - 17:15)
+    OVERTIME_LATE   // Bị lố qua 17:15 (nguy cơ chạy đèo tối / sương mù)
+}
+
+data class ActiveStopTimer(
+    val placeId: String,
+    val placeName: String,
+    val startedAtMillis: Long,
+    val targetDurationMin: Int
+)
+
+data class ScheduledStopNode(
+    val place: Place,
+    val customNote: String,
+    val legRoadKm: Double,
+    val legTravelMin: Int,
+    val arrivalMinutesOfDay: Int,
+    val stayDurationMin: Int,
+    val departureMinutesOfDay: Int,
+    val status: StopPacingStatus
+)
+
+data class DayPacingSummary(
+    val startMinutesOfDay: Int,
+    val isLiveNowMode: Boolean,
+    val totalRoadKm: Double,
+    val totalRideMinutes: Int,
+    val totalStayMinutes: Int,
+    val finishMinutesOfDay: Int,
+    val sunsetCutoffMinutes: Int,
+    val overtimeMinutes: Int,
+    val nodes: List<ScheduledStopNode>,
+    val autoTrimHint: String? = null,
+    val canAutoTrim: Boolean = false
+)
+
+
 

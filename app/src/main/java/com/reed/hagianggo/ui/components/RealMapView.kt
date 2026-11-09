@@ -323,6 +323,7 @@ fun RealMapView(
 
                     minZoomLevel = 8.0
                     maxZoomLevel = 19.0
+
                     val (initialCenter, initialZoom) = computeFocusCamera(
                         focusedZone = focusedZone,
                         places = places,

@@ -319,7 +319,6 @@ class HaGiangDatabase(private val context: Context) :
                             put("address_hint", obj.optString("addressHint", ""))
                             put("time_slots", slots.joinToString(","))
                             put("weather_fit", obj.optString("weatherFit", "ANY"))
-                            put("duration_min", obj.optInt("durationMin", 30))
                             put("car_friendly", if (obj.optBoolean("carFriendly", true)) 1 else 0)
                             put("price_est", obj.optString("priceEst", ""))
                             put("practical_tip", obj.optString("practicalTip", ""))
@@ -329,6 +328,7 @@ class HaGiangDatabase(private val context: Context) :
                         if (updatedRows == 0) {
                             coreValues.apply {
                                 put("id", placeId)
+                                put("duration_min", obj.optInt("durationMin", 30))
                                 put("is_bookmarked", 0)
                                 put("is_visited", 0)
                                 put("user_note", "")
