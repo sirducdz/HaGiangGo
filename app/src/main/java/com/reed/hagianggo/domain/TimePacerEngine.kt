@@ -55,20 +55,40 @@ object TimePacerEngine {
         startMinutesOfDay: Int,
         isLiveNowMode: Boolean,
         skippedPlaceIds: Set<String>,
-        sunsetCutoffMinutes: Int = 17 * 60 + 15
+        sunsetCutoffMinutes: Int = 17 * 60 + 15,
+        currentClockMinutes: Int = startMinutesOfDay,
+        liveGpsLat: Double? = null,
+        liveGpsLng: Double? = null,
+        isOutsideHaGiang: Boolean = true,
+        activeStopTimer: ActiveStopTimer? = null,
+        riderPaceFactor: Float = 1.0f
     ): DayPacingSummary {
-        var cursorMinutes = startMinutesOfDay
+        val safePaceFactor = riderPaceFactor.coerceIn(0.75f, 1.45f)
+        // Nếu người dùng bật Auto Live vào ban đêm (sau 17:30 tối hoặc trước 05:30 sáng để chuẩn bị lịch hôm sau),
+        // tự động lấy mốc sáng sớm (07:30) làm gốc; còn nếu đang trong khung giờ phượt ban ngày (05:30..17:30) thì bám sát từng phút đồng hồ thật!
+        val effectiveStartMin = if (isLiveNowMode) {
+            if (currentClockMinutes in (5 * 60 + 30)..(17 * 60 + 30)) {
+                currentClockMinutes
+            } else {
+                startMinutesOfDay.coerceIn(5 * 60 + 30, 15 * 60)
+            }
+        } else {
+            startMinutesOfDay
+        }
+        var cursorMinutes = effectiveStartMin
         var prevPlace: Place? = null
         var totalRoadKm = 0.0
         var totalRideMinutes = 0
         var totalStayMinutes = 0
+        var hasAnchoredLiveFirstUnvisited = false
+        var liveGpsAnchorPlaceId: String? = null
 
         // Tìm điểm kết thúc chặng đèo ban ngày (điểm cuối cùng của buổi Sáng/Trưa/Chiều trước khi sang buổi Tối)
         val lastDaytimeIndex = dayStops.indexOfLast {
             it.slot != TimeSlot.EVENING && it.place.id !in skippedPlaceIds
         }
 
-        var passFinishMinutes = startMinutesOfDay
+        var passFinishMinutes = effectiveStartMin
         val nodes = ArrayList<ScheduledStopNode>(dayStops.size)
 
         for ((index, item) in dayStops.withIndex()) {
@@ -92,7 +112,7 @@ object TimePacerEngine {
                 continue
             }
 
-            if (isLiveNowMode && place.isVisited) {
+            if (isLiveNowMode && place.isVisited && activeStopTimer?.placeId != place.id) {
                 nodes.add(
                     ScheduledStopNode(
                         place = place,
@@ -112,31 +132,84 @@ object TimePacerEngine {
                 continue
             }
 
-            val (legRoadKm, legTravelMin) = if (prevPlace == null) {
-                0.0 to 0
-            } else {
-                val straightKm = LocationMath.calculateDistanceKm(
-                    prevPlace.lat,
-                    prevPlace.lng,
-                    place.lat,
-                    place.lng
-                )
-                val roadKm = straightKm * MOUNTAIN_ROAD_FACTOR
-                val travelMin = if (straightKm < 0.15) {
-                    2
-                } else {
-                    LocationMath.estimateMountainTravelTimeMin(straightKm, vehicle)
+            val isStoppedHere = activeStopTimer != null && activeStopTimer.placeId == place.id
+            var isFromLiveGps = false
+
+            val (legRoadKm, legTravelMin) = when {
+                isStoppedHere -> {
+                    0.0 to 0
                 }
-                roadKm to travelMin
+                isLiveNowMode && !hasAnchoredLiveFirstUnvisited && !isOutsideHaGiang && liveGpsLat != null && liveGpsLng != null -> {
+                    val straightKm = LocationMath.calculateDistanceKm(liveGpsLat, liveGpsLng, place.lat, place.lng)
+                    if (straightKm <= 65.0) {
+                        isFromLiveGps = true
+                        liveGpsAnchorPlaceId = place.id
+                        val roadKm = straightKm * MOUNTAIN_ROAD_FACTOR
+                        val baseMin = if (straightKm < 0.2) 1 else LocationMath.estimateMountainTravelTimeMin(straightKm, vehicle)
+                        val scaledMin = max(1, kotlin.math.round(baseMin * safePaceFactor).toInt())
+                        roadKm to scaledMin
+                    } else if (prevPlace == null) {
+                        0.0 to 0
+                    } else {
+                        val sKm = LocationMath.calculateDistanceKm(prevPlace.lat, prevPlace.lng, place.lat, place.lng)
+                        val rKm = sKm * MOUNTAIN_ROAD_FACTOR
+                        val bMin = if (sKm < 0.15) 2 else LocationMath.estimateMountainTravelTimeMin(sKm, vehicle)
+                        val scaledMin = max(2, kotlin.math.round(bMin * safePaceFactor).toInt())
+                        rKm to scaledMin
+                    }
+                }
+                prevPlace == null -> {
+                    0.0 to 0
+                }
+                else -> {
+                    val straightKm = LocationMath.calculateDistanceKm(
+                        prevPlace.lat,
+                        prevPlace.lng,
+                        place.lat,
+                        place.lng
+                    )
+                    val roadKm = straightKm * MOUNTAIN_ROAD_FACTOR
+                    val baseMin = if (straightKm < 0.15) {
+                        2
+                    } else {
+                        LocationMath.estimateMountainTravelTimeMin(straightKm, vehicle)
+                    }
+                    val scaledMin = max(2, kotlin.math.round(baseMin * safePaceFactor).toInt())
+                    roadKm to scaledMin
+                }
             }
 
-            val arrivalMin = if (isEveningSlot && cursorMinutes < 18 * 60) {
-                max(cursorMinutes + legTravelMin, 18 * 60 + 15)
-            } else {
-                cursorMinutes + legTravelMin
+            if (!hasAnchoredLiveFirstUnvisited && !place.isVisited) {
+                hasAnchoredLiveFirstUnvisited = true
+                if (isLiveNowMode) {
+                    cursorMinutes = max(cursorMinutes, effectiveStartMin)
+                }
             }
-            val stayMin = place.durationMin.coerceIn(10, 180)
-            val departMin = arrivalMin + stayMin
+
+            val arrivalMin: Int
+            val stayMin: Int
+            val departMin: Int
+
+            if (isStoppedHere && activeStopTimer != null) {
+                val cal = java.util.Calendar.getInstance().apply {
+                    timeInMillis = activeStopTimer.startedAtMillis
+                }
+                val startedMinOfDay = cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE)
+                val elapsedMin = ((System.currentTimeMillis() - activeStopTimer.startedAtMillis) / 60_000L).toInt().coerceAtLeast(0)
+                val targetMin = activeStopTimer.targetDurationMin.coerceIn(10, 180)
+                val actualOrRemainingStay = max(targetMin, elapsedMin)
+                arrivalMin = startedMinOfDay
+                stayMin = actualOrRemainingStay
+                departMin = max(startedMinOfDay + actualOrRemainingStay, currentClockMinutes)
+            } else {
+                arrivalMin = if (isEveningSlot && cursorMinutes < 18 * 60) {
+                    max(cursorMinutes + legTravelMin, 18 * 60 + 15)
+                } else {
+                    cursorMinutes + legTravelMin
+                }
+                stayMin = place.durationMin.coerceIn(10, 180)
+                departMin = arrivalMin + stayMin
+            }
 
             // Điểm cuối cùng của buổi Chiều chính là đích đến thị trấn nghỉ đêm (hạ sơn an toàn)
             val isFinalTownArrival = index == lastDaytimeIndex
@@ -145,7 +218,7 @@ object TimePacerEngine {
             }
 
             val status = when {
-                place.isVisited -> StopPacingStatus.COMPLETED
+                place.isVisited && !isStoppedHere -> StopPacingStatus.COMPLETED
                 isEveningSlot -> StopPacingStatus.ON_TIME
                 arrivalMin > sunsetCutoffMinutes -> StopPacingStatus.OVERTIME_LATE
                 !isFinalTownArrival && departMin > sunsetCutoffMinutes + 10 -> StopPacingStatus.OVERTIME_LATE
@@ -162,7 +235,9 @@ object TimePacerEngine {
                     arrivalMinutesOfDay = arrivalMin,
                     stayDurationMin = stayMin,
                     departureMinutesOfDay = departMin,
-                    status = status
+                    status = status,
+                    isFromLiveGps = isFromLiveGps,
+                    isCurrentlyStoppedHere = isStoppedHere
                 )
             )
 
@@ -198,8 +273,10 @@ object TimePacerEngine {
         } else null
 
         return DayPacingSummary(
-            startMinutesOfDay = startMinutesOfDay,
+            startMinutesOfDay = effectiveStartMin,
             isLiveNowMode = isLiveNowMode,
+            riderPaceFactor = safePaceFactor,
+            liveGpsAnchorPlaceId = liveGpsAnchorPlaceId,
             totalRoadKm = totalRoadKm,
             totalRideMinutes = totalRideMinutes,
             totalStayMinutes = totalStayMinutes,

@@ -390,7 +390,9 @@ data class ActiveStopTimer(
     val placeId: String,
     val placeName: String,
     val startedAtMillis: Long,
-    val targetDurationMin: Int
+    val targetDurationMin: Int,
+    val isAutoGeofence: Boolean = false,
+    val hasNotifiedOverstay: Boolean = false
 )
 
 data class ScheduledStopNode(
@@ -401,12 +403,16 @@ data class ScheduledStopNode(
     val arrivalMinutesOfDay: Int,
     val stayDurationMin: Int,
     val departureMinutesOfDay: Int,
-    val status: StopPacingStatus
+    val status: StopPacingStatus,
+    val isFromLiveGps: Boolean = false,
+    val isCurrentlyStoppedHere: Boolean = false
 )
 
 data class DayPacingSummary(
     val startMinutesOfDay: Int,
     val isLiveNowMode: Boolean,
+    val riderPaceFactor: Float = 1.0f,
+    val liveGpsAnchorPlaceId: String? = null,
     val totalRoadKm: Double,
     val totalRideMinutes: Int,
     val totalStayMinutes: Int,

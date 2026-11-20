@@ -1,8 +1,19 @@
 package com.reed.hagianggo.ui
 
 import android.app.Application
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import androidx.core.app.NotificationCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.reed.hagianggo.MainActivity
 import com.reed.hagianggo.data.HaGiangRepository
 import com.reed.hagianggo.data.JsonBackupManager
 import com.reed.hagianggo.domain.FuelRangeGuard
@@ -16,8 +27,11 @@ import com.reed.hagianggo.domain.WhatNowEngine
 import com.reed.hagianggo.model.*
 import com.reed.hagianggo.service.RideTrackerService
 import com.reed.hagianggo.ui.components.MapLayerStyle
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.util.Calendar
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -79,18 +93,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _preferredMapLayer = MutableStateFlow<MapLayerStyle?>(null)
     val preferredMapLayer: StateFlow<MapLayerStyle?> = _preferredMapLayer.asStateFlow()
 
-    // ====== Smart Time Pacer & Pit-Stop Timer State ======
+    // ====== Smart Time Pacer & Zero-Touch Auto Live Pacing State ======
     private val _dayStartMinutes = MutableStateFlow(7 * 60 + 30) // Mặc định xuất phát 07:30 sáng
     val dayStartMinutes: StateFlow<Int> = _dayStartMinutes.asStateFlow()
 
-    private val _useCurrentClockForPacer = MutableStateFlow(false)
+    private val _useCurrentClockForPacer = MutableStateFlow(true)
     val useCurrentClockForPacer: StateFlow<Boolean> = _useCurrentClockForPacer.asStateFlow()
+
+    private val _liveClockMinutes = MutableStateFlow(currentSystemMinutesOfDay())
+    val liveClockMinutes: StateFlow<Int> = _liveClockMinutes.asStateFlow()
+
+    private val _riderPaceFactor = MutableStateFlow(1.0f)
+    val riderPaceFactor: StateFlow<Float> = _riderPaceFactor.asStateFlow()
+
+    private val _isAutoGeofenceEnabled = MutableStateFlow(true)
+    val isAutoGeofenceEnabled: StateFlow<Boolean> = _isAutoGeofenceEnabled.asStateFlow()
 
     private val _skippedTodayPlaceIds = MutableStateFlow<Set<String>>(emptySet())
     val skippedTodayPlaceIds: StateFlow<Set<String>> = _skippedTodayPlaceIds.asStateFlow()
 
     private val _activeStopTimer = MutableStateFlow<ActiveStopTimer?>(null)
     val activeStopTimer: StateFlow<ActiveStopTimer?> = _activeStopTimer.asStateFlow()
+
+    // Lưu mốc rời điểm trước đó để tự động học tốc độ tay lái thực tế (Adaptive Rider Pace)
+    private var lastDepartedPlace: Place? = null
+    private var lastDepartedAtMillis: Long = 0L
 
     // Cụm chặng hiện tại (tính từ override tay hoặc chip GPS)
     val activeZone: StateFlow<Zone?> = combine(
@@ -192,6 +219,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
+        createPacerAlertChannel()
         viewModelScope.launch {
             repository.initialize()
             locationTracker.startListening()
@@ -208,6 +236,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 .collect {
                     repository.refreshFuelAndRideStats()
                 }
+        }
+        // 1. Ticker cập nhật đồng hồ thực mỗi 15 giây & kiểm tra nhắc nhở quá giờ dừng (Overstay Alert)
+        viewModelScope.launch {
+            while (isActive) {
+                val nowMin = currentSystemMinutesOfDay()
+                _liveClockMinutes.value = nowMin
+                if (_useCurrentClockForPacer.value && nowMin in (5 * 60 + 30)..(17 * 60 + 30)) {
+                    _dayStartMinutes.value = nowMin
+                }
+                checkPitStopOverstayAndNotify()
+                delay(15_000L)
+            }
+        }
+        // 2. Tự động nhận diện Đến điểm (<250m) & Rời điểm (>350m) qua Geofence GPS
+        viewModelScope.launch {
+            combine(
+                currentLocation,
+                RideTrackerService.liveRideState,
+                places,
+                _isAutoGeofenceEnabled
+            ) { loc, ride, allPlaces, autoEnabled ->
+                Triple(loc, ride.currentSpeedKmh, if (autoEnabled) allPlaces else emptyList())
+            }.collect { (loc, speedKmh, allPlaces) ->
+                if (loc != null && allPlaces.isNotEmpty()) {
+                    evaluateAutoGeofencePitStop(loc.first, loc.second, speedKmh, allPlaces)
+                }
+            }
         }
     }
 
@@ -629,17 +684,180 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         showNotification(msg)
     }
 
-    // ====== Smart Time Pacer & Pit-Stop Actions ======
+    // ====== Smart Time Pacer & Zero-Touch Auto Live Pacing Actions ======
+
+    private fun currentSystemMinutesOfDay(): Int {
+        val cal = Calendar.getInstance()
+        return cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
+    }
 
     fun setDayStartTime(minutesOfDay: Int) {
         _useCurrentClockForPacer.value = false
         _dayStartMinutes.value = minutesOfDay.coerceIn(5 * 60, 15 * 60)
     }
 
-    fun enableLiveNowPacer(currentClockMinutes: Int) {
+    fun enableLiveNowPacer(currentClockMinutes: Int = currentSystemMinutesOfDay()) {
+        _liveClockMinutes.value = currentClockMinutes
         _useCurrentClockForPacer.value = true
-        _dayStartMinutes.value = currentClockMinutes.coerceIn(5 * 60, 20 * 60)
-        showNotification("⚡ Đã tính lại giờ đến các điểm chưa đi theo đồng hồ hiện tại!")
+        if (currentClockMinutes in (5 * 60 + 30)..(17 * 60 + 30)) {
+            _dayStartMinutes.value = currentClockMinutes
+            showNotification("🟢 Đã bật Điều độ Tự động theo giờ thực (${TimePacerEngine.formatMinutesOfDay(currentClockMinutes)}) & GPS Live!")
+        } else {
+            // Đang xem buổi tối/đêm -> Giữ mốc sáng 07:30 cho chuyến đi ban ngày và sẵn sàng đồng bộ Live khi trời sáng
+            if (_dayStartMinutes.value > 15 * 60) {
+                _dayStartMinutes.value = 7 * 60 + 30
+            }
+            showNotification("🟢 Đã bật Tự động Live! Vì hiện đang là ban đêm nên lịch neo mốc sáng ${TimePacerEngine.formatMinutesOfDay(_dayStartMinutes.value)} & ưu tiên tọa độ GPS thực.")
+        }
+    }
+
+    fun setRiderPaceFactor(factor: Float) {
+        val clamped = factor.coerceIn(0.75f, 1.45f)
+        _riderPaceFactor.value = clamped
+        val label = when {
+            clamped <= 0.90f -> "Nhanh (${String.format(java.util.Locale.US, "%.2fx", clamped)})"
+            clamped >= 1.15f -> "Thong thả (${String.format(java.util.Locale.US, "%.2fx", clamped)})"
+            else -> "Chuẩn (1.0x)"
+        }
+        showNotification("🛵 Đã chỉnh nhịp độ tay lái: $label")
+    }
+
+    fun toggleAutoGeofencePacer() {
+        val next = !_isAutoGeofenceEnabled.value
+        _isAutoGeofenceEnabled.value = next
+        if (next) {
+            showNotification("🛰️ Đã bật Tự động nhận diện dừng/rời điểm qua GPS (250m)")
+        } else {
+            showNotification("Đã tắt tự động bấm giờ theo bán kính GPS")
+        }
+    }
+
+    private fun evaluateAutoGeofencePitStop(
+        lat: Double,
+        lng: Double,
+        speedKmh: Float,
+        allPlaces: List<Place>
+    ) {
+        val currentTimer = _activeStopTimer.value
+        if (currentTimer != null) {
+            // Đang dừng tại 1 điểm -> Kiểm tra nếu người dùng đã nổ máy rời bán kính > 350m
+            val stoppedPlace = allPlaces.firstOrNull { it.id == currentTimer.placeId } ?: return
+            val distKm = LocationMath.calculateDistanceKm(lat, lng, stoppedPlace.lat, stoppedPlace.lng)
+            val elapsedSec = (System.currentTimeMillis() - currentTimer.startedAtMillis) / 1000L
+            if (distKm > 0.35 && (elapsedSec >= 90L || speedKmh >= 16f)) {
+                completePitStop(stoppedPlace.id, isAutoTriggered = true)
+            }
+            return
+        }
+
+        // Chưa dừng -> Kiểm tra nếu người dùng tiến vào bán kính < 250m của 1 điểm chưa đi và giảm tốc < 12 km/h
+        if (speedKmh > 14f) return
+        val nearbyUnvisited = allPlaces
+            .asSequence()
+            .filter { !it.isVisited && it.id !in _skippedTodayPlaceIds.value }
+            .map { p -> p to LocationMath.calculateDistanceKm(lat, lng, p.lat, p.lng) }
+            .filter { it.second <= 0.25 }
+            .minByOrNull { it.second }
+            ?.first ?: return
+
+        // Học tốc độ tay lái thực tế từ chặng vừa đi (nếu có điểm xuất phát trước đó)
+        val prevPlace = lastDepartedPlace
+        val prevDepartedMillis = lastDepartedAtMillis
+        if (prevPlace != null && prevPlace.id != nearbyUnvisited.id && prevDepartedMillis > 0L) {
+            val actualDriveMin = ((System.currentTimeMillis() - prevDepartedMillis) / 60_000L).toInt()
+            val straightKm = LocationMath.calculateDistanceKm(prevPlace.lat, prevPlace.lng, nearbyUnvisited.lat, nearbyUnvisited.lng)
+            val expectedMin = LocationMath.estimateMountainTravelTimeMin(straightKm, tripConfig.value.vehicle)
+            if (actualDriveMin in 3..180 && expectedMin >= 4) {
+                val observedRatio = (actualDriveMin.toFloat() / expectedMin.toFloat()).coerceIn(0.75f, 1.40f)
+                // Làm mượt EMA 65% cũ + 35% mới
+                val blended = (_riderPaceFactor.value * 0.65f + observedRatio * 0.35f).coerceIn(0.75f, 1.40f)
+                _riderPaceFactor.value = blended
+            }
+        }
+
+        _useCurrentClockForPacer.value = true
+        _activeStopTimer.value = ActiveStopTimer(
+            placeId = nearbyUnvisited.id,
+            placeName = nearbyUnvisited.name,
+            startedAtMillis = System.currentTimeMillis(),
+            targetDurationMin = nearbyUnvisited.durationMin.coerceIn(10, 180),
+            isAutoGeofence = true,
+            hasNotifiedOverstay = false
+        )
+        showNotification("🛰️ GPS nhận diện bạn vừa đến ${nearbyUnvisited.name} • Tự động đếm ngược ${nearbyUnvisited.durationMin}p!")
+    }
+
+    private fun checkPitStopOverstayAndNotify() {
+        val current = _activeStopTimer.value ?: return
+        if (current.hasNotifiedOverstay) return
+        val elapsedSec = (System.currentTimeMillis() - current.startedAtMillis) / 1000L
+        val targetSec = current.targetDurationMin * 60L
+        if (elapsedSec >= targetSec) {
+            _activeStopTimer.value = current.copy(hasNotifiedOverstay = true)
+            triggerOverstayHapticAndNotification(current)
+            showNotification("⏰ Đã hết ${current.targetDurationMin}p dừng tại ${current.placeName}! Hãy lên xe để kịp về trước 17:15.")
+        }
+    }
+
+    private fun triggerOverstayHapticAndNotification(timer: ActiveStopTimer) {
+        val app = getApplication<Application>()
+        try {
+            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vm = app.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+                vm?.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION")
+                app.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+            }
+            if (vibrator != null && vibrator.hasVibrator()) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    vibrator.vibrate(
+                        VibrationEffect.createWaveform(longArrayOf(0L, 280L, 160L, 380L), -1)
+                    )
+                } else {
+                    @Suppress("DEPRECATION")
+                    vibrator.vibrate(500L)
+                }
+            }
+        } catch (_: Exception) {}
+
+        try {
+            val openIntent = Intent(app, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val pendingIntent = PendingIntent.getActivity(
+                app,
+                2099,
+                openIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val notif = NotificationCompat.Builder(app, PACER_ALERT_CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+                .setContentTitle("⏰ Đã hết giờ dừng tại ${timer.placeName}")
+                .setContentText("Bạn đã dừng đủ ${timer.targetDurationMin} phút. Nên lên xe đi tiếp để kịp về thị trấn trước 17:15!")
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setAutoCancel(true)
+                .setContentIntent(pendingIntent)
+                .build()
+            val nm = app.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+            nm?.notify(2099, notif)
+        } catch (_: Exception) {}
+    }
+
+    private fun createPacerAlertChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val app = getApplication<Application>()
+            val channel = NotificationChannel(
+                PACER_ALERT_CHANNEL_ID,
+                "Nhắc giờ lên xe & Chống lố giờ đèo",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Cảnh báo rung và thông báo khi dừng quá giờ tại điểm check-in đèo Hà Giang"
+                enableVibration(true)
+            }
+            val nm = app.getSystemService(NotificationManager::class.java)
+            nm?.createNotificationChannel(channel)
+        }
     }
 
     fun toggleSkipPlaceToday(placeId: String) {
@@ -668,7 +886,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 repository.savePlace(place.copy(durationMin = newDuration))
                 val active = _activeStopTimer.value
                 if (active != null && active.placeId == placeId) {
-                    _activeStopTimer.value = active.copy(targetDurationMin = newDuration)
+                    _activeStopTimer.value = active.copy(targetDurationMin = newDuration, hasNotifiedOverstay = false)
                 }
             }
         }
@@ -682,13 +900,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val cfg = tripConfig.value
             val sunsetMin = cfg.sunsetCutoffHour * 60 + cfg.sunsetCutoffMinute
+            val loc = currentLocation.value
             val currentSchedule = TimePacerEngine.computeDaySchedule(
                 dayStops = dayStops,
                 vehicle = cfg.vehicle,
                 startMinutesOfDay = startMinutes,
                 isLiveNowMode = isLiveNowMode,
                 skippedPlaceIds = _skippedTodayPlaceIds.value,
-                sunsetCutoffMinutes = sunsetMin
+                sunsetCutoffMinutes = sunsetMin,
+                currentClockMinutes = _liveClockMinutes.value,
+                liveGpsLat = loc?.first,
+                liveGpsLng = loc?.second,
+                isOutsideHaGiang = isOutsideHaGiang.value,
+                activeStopTimer = _activeStopTimer.value,
+                riderPaceFactor = _riderPaceFactor.value
             )
             val lastDaytimeIndex = dayStops.indexOfLast {
                 it.slot != TimeSlot.EVENING && it.place.id !in _skippedTodayPlaceIds.value
@@ -716,12 +941,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun startPitStopTimer(place: Place) {
+    fun startPitStopTimer(place: Place, isAutoGeofence: Boolean = false) {
         _activeStopTimer.value = ActiveStopTimer(
             placeId = place.id,
             placeName = place.name,
             startedAtMillis = System.currentTimeMillis(),
-            targetDurationMin = place.durationMin.coerceIn(10, 180)
+            targetDurationMin = place.durationMin.coerceIn(10, 180),
+            isAutoGeofence = isAutoGeofence,
+            hasNotifiedOverstay = false
         )
         showNotification("⏱️ Bắt đầu đếm ngược ${place.durationMin} phút dừng tại ${place.name}")
     }
@@ -729,19 +956,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun addPitStopMinutes(extraMin: Int) {
         val current = _activeStopTimer.value ?: return
         val newTarget = (current.targetDurationMin + extraMin).coerceIn(10, 180)
-        _activeStopTimer.value = current.copy(targetDurationMin = newTarget)
+        _activeStopTimer.value = current.copy(targetDurationMin = newTarget, hasNotifiedOverstay = false)
         adjustPlaceStayDuration(current.placeId, extraMin)
         showNotification("⏱️ Đã cộng thêm $extraMin phút tại ${current.placeName}")
     }
 
-    fun completePitStop(placeId: String) {
+    fun completePitStop(placeId: String, isAutoTriggered: Boolean = false) {
         viewModelScope.launch {
             val current = places.value.firstOrNull { it.id == placeId }
-            if (current != null && !current.isVisited) {
-                repository.toggleVisited(placeId)
+            if (current != null) {
+                lastDepartedPlace = current
+                lastDepartedAtMillis = System.currentTimeMillis()
+                if (!current.isVisited) {
+                    repository.toggleVisited(placeId)
+                }
             }
             _activeStopTimer.value = null
-            showNotification("✓ Đã hoàn thành điểm dừng ${current?.name ?: ""} • Chuyển sang chặng tiếp!")
+            _useCurrentClockForPacer.value = true
+            _liveClockMinutes.value = currentSystemMinutesOfDay()
+            val prefix = if (isAutoTriggered) "🛰️ GPS nhận diện bạn đã rời " else "✓ Đã hoàn thành điểm dừng "
+            showNotification("$prefix${current?.name ?: ""} • Tự động tính giờ đi điểm kế tiếp!")
         }
     }
 
@@ -751,5 +985,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun showNotification(msg: String) {
         _notificationMessage.value = msg
+    }
+
+    companion object {
+        private const val PACER_ALERT_CHANNEL_ID = "hagiang_pacer_alert"
     }
 }

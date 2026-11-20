@@ -66,16 +66,16 @@ fun TodayScreen(
     val weatherForecasts by viewModel.weatherForecasts.collectAsState()
     val dayStartMinutes by viewModel.dayStartMinutes.collectAsState()
     val useCurrentClockForPacer by viewModel.useCurrentClockForPacer.collectAsState()
+    val liveClockMinutes by viewModel.liveClockMinutes.collectAsState()
+    val riderPaceFactor by viewModel.riderPaceFactor.collectAsState()
+    val isAutoGeofenceEnabled by viewModel.isAutoGeofenceEnabled.collectAsState()
     val skippedTodayPlaceIds by viewModel.skippedTodayPlaceIds.collectAsState()
     val activeStopTimer by viewModel.activeStopTimer.collectAsState()
 
     var selectedDay by remember { mutableIntStateOf(1) }
     var highlightedPlaceId by remember { mutableStateOf<String?>(null) }
 
-    val now = remember { Calendar.getInstance() }
-    val currentHour = now.get(Calendar.HOUR_OF_DAY)
-    val currentMinute = now.get(Calendar.MINUTE)
-    val currentTotalMinutes = currentHour * 60 + currentMinute
+    val currentTotalMinutes = liveClockMinutes
     val sunsetMinutes = config.sunsetCutoffHour * 60 + config.sunsetCutoffMinute
     val minutesUntilSunset = sunsetMinutes - currentTotalMinutes
     val isNearDark = currentTotalMinutes >= (16 * 60 + 30)
@@ -110,6 +110,11 @@ fun TodayScreen(
         config.vehicle,
         dayStartMinutes,
         useCurrentClockForPacer,
+        liveClockMinutes,
+        currentLocation,
+        isOutsideHaGiang,
+        activeStopTimer,
+        riderPaceFactor,
         skippedTodayPlaceIds,
         sunsetMinutes
     ) {
@@ -119,7 +124,13 @@ fun TodayScreen(
             startMinutesOfDay = dayStartMinutes,
             isLiveNowMode = useCurrentClockForPacer,
             skippedPlaceIds = skippedTodayPlaceIds,
-            sunsetCutoffMinutes = sunsetMinutes
+            sunsetCutoffMinutes = sunsetMinutes,
+            currentClockMinutes = liveClockMinutes,
+            liveGpsLat = currentLocation?.first,
+            liveGpsLng = currentLocation?.second,
+            isOutsideHaGiang = isOutsideHaGiang,
+            activeStopTimer = activeStopTimer,
+            riderPaceFactor = riderPaceFactor
         )
     }
     val scheduledNodeById = remember(dayPacingSummary) {
@@ -734,12 +745,15 @@ fun TodayScreen(
             DayTimePacerCard(
                 dayNumber = selectedDay,
                 summary = dayPacingSummary,
+                isAutoGeofenceEnabled = isAutoGeofenceEnabled,
                 onSelectStartMinutes = { min -> viewModel.setDayStartTime(min) },
                 onEnableLiveNow = {
                     val cal = Calendar.getInstance()
                     val nowMin = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
                     viewModel.enableLiveNowPacer(nowMin)
                 },
+                onSelectPaceFactor = { factor -> viewModel.setRiderPaceFactor(factor) },
+                onToggleAutoGeofence = { viewModel.toggleAutoGeofencePacer() },
                 onAutoTrim = {
                     viewModel.applySmartAutoTrim(
                         dayStops = orderedDayStops,
@@ -822,8 +836,11 @@ fun TodayScreen(
 private fun DayTimePacerCard(
     dayNumber: Int,
     summary: DayPacingSummary,
+    isAutoGeofenceEnabled: Boolean,
     onSelectStartMinutes: (Int) -> Unit,
     onEnableLiveNow: () -> Unit,
+    onSelectPaceFactor: (Float) -> Unit,
+    onToggleAutoGeofence: () -> Unit,
     onAutoTrim: () -> Unit
 ) {
     val isOvertime = summary.overtimeMinutes > 0
@@ -870,9 +887,13 @@ private fun DayTimePacerCard(
                             color = if (isOvertime) RoseDestructiveText else EmeraldGreenText
                         )
                         Text(
-                            text = "Tính giờ chạy đèo & giờ dừng từng điểm",
+                            text = if (summary.isLiveNowMode) {
+                                "🟢 Đang tự động bám sát giờ thật & GPS"
+                            } else {
+                                "Tính giờ chạy đèo & giờ dừng từng điểm"
+                            },
                             style = MaterialTheme.typography.labelSmall,
-                            color = TextSecondary,
+                            color = if (summary.isLiveNowMode) EmeraldGreenText else TextSecondary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -888,7 +909,7 @@ private fun DayTimePacerCard(
                 )
             }
 
-            // Hàng chọn Giờ Xuất Phát hoặc Tính từ bây giờ
+            // Hàng chọn Giờ Xuất Phát hoặc Tự động theo thực tế (Auto Live)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -896,8 +917,28 @@ private fun DayTimePacerCard(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // Nút Tự động theo đồng hồ thực & GPS Live đặt đầu tiên để dễ bật 1 chạm
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (summary.isLiveNowMode) EmeraldGreen else EmeraldGreenSoft)
+                        .border(BorderStroke(1.dp, EmeraldGreenBorder), RoundedCornerShape(8.dp))
+                        .springClickable(onClick = onEnableLiveNow)
+                        .padding(horizontal = 9.dp, vertical = 5.dp)
+                ) {
+                    Text(
+                        text = if (summary.isLiveNowMode) {
+                            "🟢 Live thực tế (${TimePacerEngine.formatMinutesOfDay(summary.startMinutesOfDay)})"
+                        } else {
+                            "⚡ Tự động theo giờ thực"
+                        },
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 11.sp),
+                        color = if (summary.isLiveNowMode) Color.White else EmeraldGreenText
+                    )
+                }
+
                 Text(
-                    text = "Xuất phát:",
+                    text = "hoặc:",
                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
                     color = TextMuted
                 )
@@ -927,24 +968,67 @@ private fun DayTimePacerCard(
                         )
                     }
                 }
+            }
 
-                // Nút Tính từ đồng hồ hiện tại
+            // Hàng 2: Nhịp độ tay lái thực tế + Công tắc Auto Geofence GPS (250m)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Tay lái:",
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = TextMuted
+                )
+                listOf(
+                    0.85f to "Nhanh 0.85x",
+                    1.0f to "Chuẩn 1.0x",
+                    1.20f to "Thong thả 1.2x"
+                ).forEach { (factorVal, label) ->
+                    val isSelected = kotlin.math.abs(summary.riderPaceFactor - factorVal) < 0.06f
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isSelected) SkyTelemetry else SurfaceMuted)
+                            .border(
+                                BorderStroke(1.dp, if (isSelected) SkyTelemetry else BorderSubtle),
+                                RoundedCornerShape(8.dp)
+                            )
+                            .springClickable { onSelectPaceFactor(factorVal) }
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 10.5.sp
+                            ),
+                            color = if (isSelected) Color.White else TextSecondary
+                        )
+                    }
+                }
+
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
-                        .background(if (summary.isLiveNowMode) SkyTelemetry else SkyTelemetrySoft)
-                        .border(BorderStroke(1.dp, SkyTelemetryBorder), RoundedCornerShape(8.dp))
-                        .springClickable(onClick = onEnableLiveNow)
-                        .padding(horizontal = 9.dp, vertical = 5.dp)
+                        .background(if (isAutoGeofenceEnabled) EmeraldGreenSoft else SurfaceMuted)
+                        .border(
+                            BorderStroke(1.dp, if (isAutoGeofenceEnabled) EmeraldGreenBorder else BorderSubtle),
+                            RoundedCornerShape(8.dp)
+                        )
+                        .springClickable(onClick = onToggleAutoGeofence)
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Text(
-                        text = if (summary.isLiveNowMode) {
-                            "⚡ Đang tính từ ${TimePacerEngine.formatMinutesOfDay(summary.startMinutesOfDay)}"
-                        } else {
-                            "⚡ Tính từ bây giờ"
-                        },
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 11.sp),
-                        color = if (summary.isLiveNowMode) Color.White else SkyTelemetry
+                        text = if (isAutoGeofenceEnabled) "🛰️ Tự bấm giờ GPS: BẬT" else "🛰️ Tự bấm giờ GPS: TẮT",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.5.sp
+                        ),
+                        color = if (isAutoGeofenceEnabled) EmeraldGreenText else TextMuted
                     )
                 }
             }
@@ -1142,7 +1226,11 @@ private fun ActivePitStopBanner(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = if (isOver) "⚠️ ĐÃ QUÁ GIỜ DỪNG TẠI ĐIỂM!" else "⏱️ ĐANG DỪNG CHƠI / NGHỈ TẠI ĐIỂM",
+                        text = when {
+                            isOver -> "⚠️ ĐÃ QUÁ GIỜ DỪNG • ĐANG ĐẨY LÙI LỊCH TRÌNH!"
+                            timer.isAutoGeofence -> "🛰️ GPS TỰ ĐỘNG NHẬN DIỆN BẠN ĐANG DỪNG TẠI ĐIỂM"
+                            else -> "⏱️ ĐANG DỪNG CHƠI / NGHỈ TẠI ĐIỂM"
+                        },
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Black),
                         color = if (isOver) RoseDestructiveText else ElectricOrangeHover
                     )
@@ -1154,7 +1242,11 @@ private fun ActivePitStopBanner(
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = "Nên lên xe đi tiếp lúc: $leaveTimeStr (Mục tiêu ${timer.targetDurationMin}p)",
+                        text = if (timer.isAutoGeofence) {
+                            "Nên đi tiếp lúc $leaveTimeStr • Rời bán kính 350m sẽ tự động chốt!"
+                        } else {
+                            "Nên lên xe đi tiếp lúc: $leaveTimeStr (Mục tiêu ${timer.targetDurationMin}p)"
+                        },
                         style = MaterialTheme.typography.labelSmall,
                         color = TextSecondary
                     )
@@ -1322,15 +1414,23 @@ fun ItineraryPlaceCard(
                 Box(
                     modifier = Modifier
                         .clip(CircleShape)
-                        .background(SkyTelemetrySoft)
-                        .border(BorderStroke(1.dp, SkyTelemetryBorder), CircleShape)
+                        .background(if (scheduledNode.isFromLiveGps) EmeraldGreenSoft else SkyTelemetrySoft)
+                        .border(
+                            BorderStroke(1.dp, if (scheduledNode.isFromLiveGps) EmeraldGreenBorder else SkyTelemetryBorder),
+                            CircleShape
+                        )
                         .padding(horizontal = 10.dp, vertical = 3.5.dp)
                 ) {
                     val vehIcon = if (vehicle == VehicleType.MOTORBIKE) "🛵" else "🚗"
+                    val legText = if (scheduledNode.isFromLiveGps) {
+                        "🛰️ Từ vị trí GPS của bạn • ~${String.format(Locale.US, "%.1f", scheduledNode.legRoadKm)} km (~${scheduledNode.legTravelMin} phút)"
+                    } else {
+                        "$vehIcon Chạy đèo ~${String.format(Locale.US, "%.1f", scheduledNode.legRoadKm)} km • Mất ~${scheduledNode.legTravelMin} phút"
+                    }
                     Text(
-                        text = "$vehIcon Chạy đèo ~${String.format(Locale.US, "%.1f", scheduledNode.legRoadKm)} km • Mất ~${scheduledNode.legTravelMin} phút",
+                        text = legText,
                         style = TelemetryTextStyle.copy(fontSize = 10.5.sp),
-                        color = SkyTelemetry
+                        color = if (scheduledNode.isFromLiveGps) EmeraldGreenText else SkyTelemetry
                     )
                 }
             }
