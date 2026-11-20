@@ -746,6 +746,7 @@ fun TodayScreen(
                 dayNumber = selectedDay,
                 summary = dayPacingSummary,
                 isAutoGeofenceEnabled = isAutoGeofenceEnabled,
+                isRideTracking = liveRideState.isTracking,
                 onSelectStartMinutes = { min -> viewModel.setDayStartTime(min) },
                 onEnableLiveNow = {
                     val cal = Calendar.getInstance()
@@ -754,6 +755,7 @@ fun TodayScreen(
                 },
                 onSelectPaceFactor = { factor -> viewModel.setRiderPaceFactor(factor) },
                 onToggleAutoGeofence = { viewModel.toggleAutoGeofencePacer() },
+                onStartRideTracking = { viewModel.startRide() },
                 onAutoTrim = {
                     viewModel.applySmartAutoTrim(
                         dayStops = orderedDayStops,
@@ -837,10 +839,12 @@ private fun DayTimePacerCard(
     dayNumber: Int,
     summary: DayPacingSummary,
     isAutoGeofenceEnabled: Boolean,
+    isRideTracking: Boolean,
     onSelectStartMinutes: (Int) -> Unit,
     onEnableLiveNow: () -> Unit,
     onSelectPaceFactor: (Float) -> Unit,
     onToggleAutoGeofence: () -> Unit,
+    onStartRideTracking: () -> Unit,
     onAutoTrim: () -> Unit
 ) {
     val isOvertime = summary.overtimeMinutes > 0
@@ -1029,6 +1033,37 @@ private fun DayTimePacerCard(
                             fontSize = 10.5.sp
                         ),
                         color = if (isAutoGeofenceEnabled) EmeraldGreenText else TextMuted
+                    )
+                }
+            }
+
+            if (isAutoGeofenceEnabled && !isRideTracking) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(SkyTelemetrySoft)
+                        .border(BorderStroke(1.dp, SkyTelemetryBorder), RoundedCornerShape(10.dp))
+                        .springClickable(onClick = onStartRideTracking)
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "🛰️ Bật Chế độ Phượt (HUD) để tự check-in & rung báo cả khi tắt màn hình",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp),
+                        color = SkyTelemetry,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 2
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Bật HUD",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 11.sp
+                        ),
+                        color = ElectricOrangeHover
                     )
                 }
             }

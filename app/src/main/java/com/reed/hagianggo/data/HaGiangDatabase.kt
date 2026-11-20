@@ -493,6 +493,11 @@ class HaGiangDatabase(private val context: Context) :
         writableDatabase.update("places", cv, "id = ?", arrayOf(placeId))
     }
 
+    fun updatePlaceDurationMin(placeId: String, durationMin: Int) {
+        val cv = ContentValues().apply { put("duration_min", durationMin.coerceIn(10, 180)) }
+        writableDatabase.update("places", cv, "id = ?", arrayOf(placeId))
+    }
+
     fun getTripConfig(): TripConfig {
         val db = readableDatabase
         val cursor = db.rawQuery(

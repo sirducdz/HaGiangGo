@@ -104,17 +104,23 @@ class MainActivity : ComponentActivity() {
                         context,
                         Manifest.permission.ACCESS_FINE_LOCATION
                     ) == PackageManager.PERMISSION_GRANTED
+                    val hasPostNotif = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                        ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.POST_NOTIFICATIONS
+                        ) == PackageManager.PERMISSION_GRANTED
 
-                    val perms = mutableListOf(
-                        Manifest.permission.ACCESS_FINE_LOCATION,
-                        Manifest.permission.ACCESS_COARSE_LOCATION
-                    )
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        perms.add(Manifest.permission.POST_NOTIFICATIONS)
+                    val missingPerms = mutableListOf<String>()
+                    if (!hasFine) {
+                        missingPerms.add(Manifest.permission.ACCESS_FINE_LOCATION)
+                        missingPerms.add(Manifest.permission.ACCESS_COARSE_LOCATION)
+                    }
+                    if (!hasPostNotif && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        missingPerms.add(Manifest.permission.POST_NOTIFICATIONS)
                     }
 
-                    if (!hasFine) {
-                        permissionLauncher.launch(perms.toTypedArray())
+                    if (missingPerms.isNotEmpty()) {
+                        permissionLauncher.launch(missingPerms.toTypedArray())
                     }
                 }
 

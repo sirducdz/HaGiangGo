@@ -1,36 +1,31 @@
 package com.reed.hagianggo.ui
 
 import android.app.Application
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
-import android.content.Context
-import android.content.Intent
-import android.os.Build
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
-import androidx.core.app.NotificationCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.reed.hagianggo.MainActivity
+import com.reed.hagianggo.data.HaGiangDatabase
 import com.reed.hagianggo.data.HaGiangRepository
 import com.reed.hagianggo.data.JsonBackupManager
+import com.reed.hagianggo.domain.AutoCheckInCoordinator
+import com.reed.hagianggo.domain.AutoCheckInEvent
 import com.reed.hagianggo.domain.FuelRangeGuard
 import com.reed.hagianggo.domain.LocationMath
 import com.reed.hagianggo.domain.MountainWeatherManager
 import com.reed.hagianggo.domain.OfflineLocationTracker
 import com.reed.hagianggo.domain.OfflineMapManager
+import com.reed.hagianggo.domain.PacerNotificationHelper
 import com.reed.hagianggo.domain.SplitbillEngine
 import com.reed.hagianggo.domain.TimePacerEngine
 import com.reed.hagianggo.domain.WhatNowEngine
 import com.reed.hagianggo.model.*
 import com.reed.hagianggo.service.RideTrackerService
 import com.reed.hagianggo.ui.components.MapLayerStyle
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Calendar
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -103,21 +98,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _liveClockMinutes = MutableStateFlow(currentSystemMinutesOfDay())
     val liveClockMinutes: StateFlow<Int> = _liveClockMinutes.asStateFlow()
 
-    private val _riderPaceFactor = MutableStateFlow(1.0f)
-    val riderPaceFactor: StateFlow<Float> = _riderPaceFactor.asStateFlow()
-
-    private val _isAutoGeofenceEnabled = MutableStateFlow(true)
-    val isAutoGeofenceEnabled: StateFlow<Boolean> = _isAutoGeofenceEnabled.asStateFlow()
+    val riderPaceFactor: StateFlow<Float> = AutoCheckInCoordinator.riderPaceFactor
+    val isAutoGeofenceEnabled: StateFlow<Boolean> = AutoCheckInCoordinator.isAutoCheckInEnabled
 
     private val _skippedTodayPlaceIds = MutableStateFlow<Set<String>>(emptySet())
     val skippedTodayPlaceIds: StateFlow<Set<String>> = _skippedTodayPlaceIds.asStateFlow()
 
-    private val _activeStopTimer = MutableStateFlow<ActiveStopTimer?>(null)
-    val activeStopTimer: StateFlow<ActiveStopTimer?> = _activeStopTimer.asStateFlow()
-
-    // Lưu mốc rời điểm trước đó để tự động học tốc độ tay lái thực tế (Adaptive Rider Pace)
-    private var lastDepartedPlace: Place? = null
-    private var lastDepartedAtMillis: Long = 0L
+    val activeStopTimer: StateFlow<ActiveStopTimer?> = AutoCheckInCoordinator.activeStopTimer
 
     // Cụm chặng hiện tại (tính từ override tay hoặc chip GPS)
     val activeZone: StateFlow<Zone?> = combine(
@@ -219,7 +206,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
-        createPacerAlertChannel()
+        PacerNotificationHelper.ensureChannels(getApplication())
         viewModelScope.launch {
             repository.initialize()
             locationTracker.startListening()
@@ -237,7 +224,44 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     repository.refreshFuelAndRideStats()
                 }
         }
-        // 1. Ticker cập nhật đồng hồ thực mỗi 15 giây & kiểm tra nhắc nhở quá giờ dừng (Overstay Alert)
+        // Đồng bộ sự kiện Auto Check-in / Pit-Stop từ Service nền & Notification Actions lên UI tức thì
+        viewModelScope.launch {
+            AutoCheckInCoordinator.events.collect { event ->
+                when (event) {
+                    is AutoCheckInEvent.ArrivedAndTimerStarted -> {
+                        if (event.isAuto) {
+                            repository.refreshPlaces()
+                            _useCurrentClockForPacer.value = true
+                            _liveClockMinutes.value = currentSystemMinutesOfDay()
+                            showNotification("🛰️ GPS nhận diện bạn vừa đến ${event.placeName} • Đã đánh dấu Đã đi & đếm ngược ${event.durationMin}p!")
+                        } else {
+                            showNotification("⏱️ Bắt đầu đếm ngược ${event.durationMin} phút dừng tại ${event.placeName}")
+                        }
+                    }
+                    is AutoCheckInEvent.PassThroughCheckedIn -> {
+                        repository.refreshPlaces()
+                        _useCurrentClockForPacer.value = true
+                        _liveClockMinutes.value = currentSystemMinutesOfDay()
+                        showNotification("✓ Đã tự động check-in: ${event.placeName}")
+                    }
+                    is AutoCheckInEvent.DepartedPitStop -> {
+                        repository.refreshPlaces()
+                        _useCurrentClockForPacer.value = true
+                        _liveClockMinutes.value = currentSystemMinutesOfDay()
+                        val prefix = if (event.isAuto) "🛰️ GPS nhận diện bạn đã rời " else "✓ Đã hoàn thành điểm dừng "
+                        showNotification("$prefix${event.placeName} • Tự động tính giờ đi điểm kế tiếp!")
+                    }
+                    is AutoCheckInEvent.OverstayWarning -> {
+                        showNotification("⏰ Đã hết ${event.targetDurationMin}p dừng tại ${event.placeName}! Hãy lên xe để kịp về trước 17:15.")
+                    }
+                    is AutoCheckInEvent.PitStopDurationExtended -> {
+                        repository.refreshPlaces()
+                        showNotification("⏱️ Đã cộng thêm ${event.deltaMin} phút tại ${event.placeName}")
+                    }
+                }
+            }
+        }
+        // 1. Ticker cập nhật đồng hồ thực mỗi 15 giây & kiểm tra quá giờ dừng (khi Service nền chưa chạy)
         viewModelScope.launch {
             while (isActive) {
                 val nowMin = currentSystemMinutesOfDay()
@@ -245,22 +269,41 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (_useCurrentClockForPacer.value && nowMin in (5 * 60 + 30)..(17 * 60 + 30)) {
                     _dayStartMinutes.value = nowMin
                 }
-                checkPitStopOverstayAndNotify()
+                if (!RideTrackerService.liveRideState.value.isTracking) {
+                    AutoCheckInCoordinator.checkOverstay(getApplication())
+                }
                 delay(15_000L)
             }
         }
-        // 2. Tự động nhận diện Đến điểm (<250m) & Rời điểm (>350m) qua Geofence GPS
+        // 2. Nhận diện Đến điểm (<=250m) & Rời điểm (>350m) khi mở app mà chưa bật Chế độ Phượt nền (HUD)
         viewModelScope.launch {
             combine(
                 currentLocation,
                 RideTrackerService.liveRideState,
                 places,
-                _isAutoGeofenceEnabled
-            ) { loc, ride, allPlaces, autoEnabled ->
-                Triple(loc, ride.currentSpeedKmh, if (autoEnabled) allPlaces else emptyList())
-            }.collect { (loc, speedKmh, allPlaces) ->
-                if (loc != null && allPlaces.isNotEmpty()) {
-                    evaluateAutoGeofencePitStop(loc.first, loc.second, speedKmh, allPlaces)
+                isAutoGeofenceEnabled,
+                tripConfig
+            ) { loc, ride, allPlaces, autoEnabled, cfg ->
+                if (!ride.isTracking && autoEnabled && loc != null && allPlaces.isNotEmpty()) {
+                    Triple(loc, allPlaces, cfg.vehicle)
+                } else {
+                    null
+                }
+            }.collect { payload ->
+                if (payload != null) {
+                    val (loc, allPlaces, vehicle) = payload
+                    withContext(Dispatchers.IO) {
+                        val db = HaGiangDatabase.getInstance(getApplication())
+                        AutoCheckInCoordinator.processLocation(
+                            context = getApplication(),
+                            database = db,
+                            lat = loc.first,
+                            lng = loc.second,
+                            speedKmh = 0f,
+                            allPlaces = allPlaces,
+                            vehicle = vehicle
+                        )
+                    }
                 }
             }
         }
@@ -273,6 +316,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun onAppResumed() {
         locationTracker.refreshLocationState(requestImmediate = true)
+        viewModelScope.launch {
+            repository.refreshPlaces()
+        }
     }
 
     fun requestImmediateMyLocation() {
@@ -351,7 +397,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun toggleVisited(placeId: String) {
         viewModelScope.launch {
+            val wasVisited = places.value.firstOrNull { it.id == placeId }?.isVisited == true
             repository.toggleVisited(placeId)
+            if (wasVisited) {
+                AutoCheckInCoordinator.resetNotifiedPlace(placeId)
+            }
         }
     }
 
@@ -713,7 +763,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setRiderPaceFactor(factor: Float) {
         val clamped = factor.coerceIn(0.75f, 1.45f)
-        _riderPaceFactor.value = clamped
+        AutoCheckInCoordinator.setRiderPaceFactor(clamped)
         val label = when {
             clamped <= 0.90f -> "Nhanh (${String.format(java.util.Locale.US, "%.2fx", clamped)})"
             clamped >= 1.15f -> "Thong thả (${String.format(java.util.Locale.US, "%.2fx", clamped)})"
@@ -723,140 +773,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun toggleAutoGeofencePacer() {
-        val next = !_isAutoGeofenceEnabled.value
-        _isAutoGeofenceEnabled.value = next
+        val next = !isAutoGeofenceEnabled.value
+        AutoCheckInCoordinator.setAutoCheckInEnabled(next)
         if (next) {
-            showNotification("🛰️ Đã bật Tự động nhận diện dừng/rời điểm qua GPS (250m)")
+            showNotification("🛰️ Đã bật Tự động check-in & nhận diện dừng/rời điểm qua GPS (250m)")
         } else {
-            showNotification("Đã tắt tự động bấm giờ theo bán kính GPS")
-        }
-    }
-
-    private fun evaluateAutoGeofencePitStop(
-        lat: Double,
-        lng: Double,
-        speedKmh: Float,
-        allPlaces: List<Place>
-    ) {
-        val currentTimer = _activeStopTimer.value
-        if (currentTimer != null) {
-            // Đang dừng tại 1 điểm -> Kiểm tra nếu người dùng đã nổ máy rời bán kính > 350m
-            val stoppedPlace = allPlaces.firstOrNull { it.id == currentTimer.placeId } ?: return
-            val distKm = LocationMath.calculateDistanceKm(lat, lng, stoppedPlace.lat, stoppedPlace.lng)
-            val elapsedSec = (System.currentTimeMillis() - currentTimer.startedAtMillis) / 1000L
-            if (distKm > 0.35 && (elapsedSec >= 90L || speedKmh >= 16f)) {
-                completePitStop(stoppedPlace.id, isAutoTriggered = true)
-            }
-            return
-        }
-
-        // Chưa dừng -> Kiểm tra nếu người dùng tiến vào bán kính < 250m của 1 điểm chưa đi và giảm tốc < 12 km/h
-        if (speedKmh > 14f) return
-        val nearbyUnvisited = allPlaces
-            .asSequence()
-            .filter { !it.isVisited && it.id !in _skippedTodayPlaceIds.value }
-            .map { p -> p to LocationMath.calculateDistanceKm(lat, lng, p.lat, p.lng) }
-            .filter { it.second <= 0.25 }
-            .minByOrNull { it.second }
-            ?.first ?: return
-
-        // Học tốc độ tay lái thực tế từ chặng vừa đi (nếu có điểm xuất phát trước đó)
-        val prevPlace = lastDepartedPlace
-        val prevDepartedMillis = lastDepartedAtMillis
-        if (prevPlace != null && prevPlace.id != nearbyUnvisited.id && prevDepartedMillis > 0L) {
-            val actualDriveMin = ((System.currentTimeMillis() - prevDepartedMillis) / 60_000L).toInt()
-            val straightKm = LocationMath.calculateDistanceKm(prevPlace.lat, prevPlace.lng, nearbyUnvisited.lat, nearbyUnvisited.lng)
-            val expectedMin = LocationMath.estimateMountainTravelTimeMin(straightKm, tripConfig.value.vehicle)
-            if (actualDriveMin in 3..180 && expectedMin >= 4) {
-                val observedRatio = (actualDriveMin.toFloat() / expectedMin.toFloat()).coerceIn(0.75f, 1.40f)
-                // Làm mượt EMA 65% cũ + 35% mới
-                val blended = (_riderPaceFactor.value * 0.65f + observedRatio * 0.35f).coerceIn(0.75f, 1.40f)
-                _riderPaceFactor.value = blended
-            }
-        }
-
-        _useCurrentClockForPacer.value = true
-        _activeStopTimer.value = ActiveStopTimer(
-            placeId = nearbyUnvisited.id,
-            placeName = nearbyUnvisited.name,
-            startedAtMillis = System.currentTimeMillis(),
-            targetDurationMin = nearbyUnvisited.durationMin.coerceIn(10, 180),
-            isAutoGeofence = true,
-            hasNotifiedOverstay = false
-        )
-        showNotification("🛰️ GPS nhận diện bạn vừa đến ${nearbyUnvisited.name} • Tự động đếm ngược ${nearbyUnvisited.durationMin}p!")
-    }
-
-    private fun checkPitStopOverstayAndNotify() {
-        val current = _activeStopTimer.value ?: return
-        if (current.hasNotifiedOverstay) return
-        val elapsedSec = (System.currentTimeMillis() - current.startedAtMillis) / 1000L
-        val targetSec = current.targetDurationMin * 60L
-        if (elapsedSec >= targetSec) {
-            _activeStopTimer.value = current.copy(hasNotifiedOverstay = true)
-            triggerOverstayHapticAndNotification(current)
-            showNotification("⏰ Đã hết ${current.targetDurationMin}p dừng tại ${current.placeName}! Hãy lên xe để kịp về trước 17:15.")
-        }
-    }
-
-    private fun triggerOverstayHapticAndNotification(timer: ActiveStopTimer) {
-        val app = getApplication<Application>()
-        try {
-            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val vm = app.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
-                vm?.defaultVibrator
-            } else {
-                @Suppress("DEPRECATION")
-                app.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
-            }
-            if (vibrator != null && vibrator.hasVibrator()) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    vibrator.vibrate(
-                        VibrationEffect.createWaveform(longArrayOf(0L, 280L, 160L, 380L), -1)
-                    )
-                } else {
-                    @Suppress("DEPRECATION")
-                    vibrator.vibrate(500L)
-                }
-            }
-        } catch (_: Exception) {}
-
-        try {
-            val openIntent = Intent(app, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            }
-            val pendingIntent = PendingIntent.getActivity(
-                app,
-                2099,
-                openIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            val notif = NotificationCompat.Builder(app, PACER_ALERT_CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-                .setContentTitle("⏰ Đã hết giờ dừng tại ${timer.placeName}")
-                .setContentText("Bạn đã dừng đủ ${timer.targetDurationMin} phút. Nên lên xe đi tiếp để kịp về thị trấn trước 17:15!")
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .setAutoCancel(true)
-                .setContentIntent(pendingIntent)
-                .build()
-            val nm = app.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
-            nm?.notify(2099, notif)
-        } catch (_: Exception) {}
-    }
-
-    private fun createPacerAlertChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val app = getApplication<Application>()
-            val channel = NotificationChannel(
-                PACER_ALERT_CHANNEL_ID,
-                "Nhắc giờ lên xe & Chống lố giờ đèo",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "Cảnh báo rung và thông báo khi dừng quá giờ tại điểm check-in đèo Hà Giang"
-                enableVibration(true)
-            }
-            val nm = app.getSystemService(NotificationManager::class.java)
-            nm?.createNotificationChannel(channel)
+            showNotification("Đã tắt tự động check-in & bấm giờ theo bán kính GPS")
         }
     }
 
@@ -870,6 +792,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             true
         }
         _skippedTodayPlaceIds.value = current
+        AutoCheckInCoordinator.updateSkippedPlaceIds(current)
         val placeName = places.value.firstOrNull { it.id == placeId }?.name ?: "địa điểm"
         if (added) {
             showNotification("⏭️ Tạm bỏ qua '$placeName' để rút ngắn giờ về trước khi tối.")
@@ -884,10 +807,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val newDuration = (place.durationMin + deltaMinutes).coerceIn(10, 180)
             if (newDuration != place.durationMin) {
                 repository.savePlace(place.copy(durationMin = newDuration))
-                val active = _activeStopTimer.value
-                if (active != null && active.placeId == placeId) {
-                    _activeStopTimer.value = active.copy(targetDurationMin = newDuration, hasNotifiedOverstay = false)
-                }
+                AutoCheckInCoordinator.syncPlaceDuration(placeId, newDuration)
             }
         }
     }
@@ -912,8 +832,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 liveGpsLat = loc?.first,
                 liveGpsLng = loc?.second,
                 isOutsideHaGiang = isOutsideHaGiang.value,
-                activeStopTimer = _activeStopTimer.value,
-                riderPaceFactor = _riderPaceFactor.value
+                activeStopTimer = activeStopTimer.value,
+                riderPaceFactor = riderPaceFactor.value
             )
             val lastDaytimeIndex = dayStops.indexOfLast {
                 it.slot != TimeSlot.EVENING && it.place.id !in _skippedTodayPlaceIds.value
@@ -932,62 +852,51 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val place = places.value.firstOrNull { it.id == placeId }
                 if (place != null) {
                     repository.savePlace(place.copy(durationMin = newMin))
+                    AutoCheckInCoordinator.syncPlaceDuration(placeId, newMin)
                 }
             }
             if (plan.suggestedSkipIds.isNotEmpty()) {
-                _skippedTodayPlaceIds.value = _skippedTodayPlaceIds.value + plan.suggestedSkipIds
+                val updatedSkips = _skippedTodayPlaceIds.value + plan.suggestedSkipIds
+                _skippedTodayPlaceIds.value = updatedSkips
+                AutoCheckInCoordinator.updateSkippedPlaceIds(updatedSkips)
             }
             showNotification("✨ Đã tối ưu lịch trình: Tiết kiệm ~${plan.totalSavedMinutes} phút để về trước 17:15!")
         }
     }
 
-    fun startPitStopTimer(place: Place, isAutoGeofence: Boolean = false) {
-        _activeStopTimer.value = ActiveStopTimer(
-            placeId = place.id,
-            placeName = place.name,
-            startedAtMillis = System.currentTimeMillis(),
-            targetDurationMin = place.durationMin.coerceIn(10, 180),
-            isAutoGeofence = isAutoGeofence,
-            hasNotifiedOverstay = false
-        )
-        showNotification("⏱️ Bắt đầu đếm ngược ${place.durationMin} phút dừng tại ${place.name}")
+    fun startPitStopTimer(place: Place) {
+        AutoCheckInCoordinator.startManualPitStop(place)
     }
 
     fun addPitStopMinutes(extraMin: Int) {
-        val current = _activeStopTimer.value ?: return
-        val newTarget = (current.targetDurationMin + extraMin).coerceIn(10, 180)
-        _activeStopTimer.value = current.copy(targetDurationMin = newTarget, hasNotifiedOverstay = false)
-        adjustPlaceStayDuration(current.placeId, extraMin)
-        showNotification("⏱️ Đã cộng thêm $extraMin phút tại ${current.placeName}")
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                val db = HaGiangDatabase.getInstance(getApplication())
+                AutoCheckInCoordinator.addPitStopMinutes(getApplication(), db, extraMin)
+            }
+        }
     }
 
     fun completePitStop(placeId: String, isAutoTriggered: Boolean = false) {
         viewModelScope.launch {
-            val current = places.value.firstOrNull { it.id == placeId }
-            if (current != null) {
-                lastDepartedPlace = current
-                lastDepartedAtMillis = System.currentTimeMillis()
-                if (!current.isVisited) {
-                    repository.toggleVisited(placeId)
-                }
+            withContext(Dispatchers.IO) {
+                val db = HaGiangDatabase.getInstance(getApplication())
+                AutoCheckInCoordinator.completePitStop(
+                    context = getApplication(),
+                    database = db,
+                    placeId = placeId,
+                    allPlaces = places.value,
+                    isAuto = isAutoTriggered
+                )
             }
-            _activeStopTimer.value = null
-            _useCurrentClockForPacer.value = true
-            _liveClockMinutes.value = currentSystemMinutesOfDay()
-            val prefix = if (isAutoTriggered) "🛰️ GPS nhận diện bạn đã rời " else "✓ Đã hoàn thành điểm dừng "
-            showNotification("$prefix${current?.name ?: ""} • Tự động tính giờ đi điểm kế tiếp!")
         }
     }
 
     fun cancelPitStopTimer() {
-        _activeStopTimer.value = null
+        AutoCheckInCoordinator.cancelPitStop(getApplication())
     }
 
     private fun showNotification(msg: String) {
         _notificationMessage.value = msg
-    }
-
-    companion object {
-        private const val PACER_ALERT_CHANNEL_ID = "hagiang_pacer_alert"
     }
 }

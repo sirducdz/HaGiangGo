@@ -17,8 +17,10 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.reed.hagianggo.MainActivity
 import com.reed.hagianggo.data.HaGiangDatabase
+import com.reed.hagianggo.domain.AutoCheckInCoordinator
 import com.reed.hagianggo.domain.LocationMath
 import com.reed.hagianggo.domain.MilestoneDetector
+import com.reed.hagianggo.domain.PacerNotificationHelper
 import com.reed.hagianggo.model.LiveRideState
 import com.reed.hagianggo.model.Place
 import com.reed.hagianggo.model.RidePoint
@@ -47,6 +49,7 @@ class RideTrackerService : Service(), LocationListener {
 
     private val recentPoints = mutableListOf<Pair<Double, Double>>()
     private var cachedPlaces: List<Place> = emptyList()
+    private var cachedVehicle: VehicleType = VehicleType.MOTORBIKE
     private var isProviderReceiverRegistered = false
 
     private val providerSwitchReceiver = object : BroadcastReceiver() {
@@ -112,6 +115,7 @@ class RideTrackerService : Service(), LocationListener {
         locationManager = getSystemService(Context.LOCATION_SERVICE) as? LocationManager
         database = HaGiangDatabase.getInstance(this)
         createNotificationChannel()
+        PacerNotificationHelper.ensureChannels(this)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -139,6 +143,7 @@ class RideTrackerService : Service(), LocationListener {
         serviceScope.launch(Dispatchers.IO) {
             currentSessionId = database.createRideSession()
             cachedPlaces = database.getAllPlaces()
+            cachedVehicle = database.getTripConfig().vehicle
         }
 
         val notification = buildNotification(0f, 0.0, 0.0)
@@ -235,26 +240,33 @@ class RideTrackerService : Service(), LocationListener {
             } catch (_: Exception) {}
             isProviderReceiverRegistered = false
         }
-        serviceScope.cancel()
 
-        serviceScope.launch(Dispatchers.IO) {
-            if (currentSessionId > 0) {
-                val avgSpeed = if (totalDistanceKm > 0) {
-                    val hours = (System.currentTimeMillis() - startTimeMillis) / 3600000.0
-                    (totalDistanceKm / hours).toFloat()
+        val sessionToFinish = currentSessionId
+        val distToSave = totalDistanceKm
+        val maxSpdToSave = maxSpeedKmh
+        val maxAltToSave = maxAltitude
+        val minAltToSave = if (minAltitude == 9999.0) 0.0 else minAltitude
+        val startedMs = startTimeMillis
+
+        if (sessionToFinish > 0) {
+            CoroutineScope(Dispatchers.IO).launch {
+                val avgSpeed = if (distToSave > 0) {
+                    val hours = ((System.currentTimeMillis() - startedMs) / 3600000.0).coerceAtLeast(0.001)
+                    (distToSave / hours).toFloat()
                 } else 0f
 
                 database.finishRideSession(
-                    sessionId = currentSessionId,
-                    totalDistKm = totalDistanceKm,
-                    maxSpeedKmh = maxSpeedKmh,
+                    sessionId = sessionToFinish,
+                    totalDistKm = distToSave,
+                    maxSpeedKmh = maxSpdToSave,
                     avgSpeedKmh = avgSpeed,
-                    maxAlt = maxAltitude,
-                    minAlt = if (minAltitude == 9999.0) 0.0 else minAltitude
+                    maxAlt = maxAltToSave,
+                    minAlt = minAltToSave
                 )
             }
         }
 
+        serviceScope.cancel()
         _liveRideState.value = LiveRideState(isTracking = false)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -264,11 +276,21 @@ class RideTrackerService : Service(), LocationListener {
     private fun startTimer() {
         timerJob?.cancel()
         timerJob = serviceScope.launch {
+            var overstayTick = 0
             while (isActive) {
                 delay(1000L)
                 if (!isPaused && _liveRideState.value.isTracking) {
                     val elapsed = (System.currentTimeMillis() - startTimeMillis) / 1000L
                     _liveRideState.value = _liveRideState.value.copy(elapsedTimeSeconds = elapsed)
+                    overstayTick++
+                    if (overstayTick >= 15) {
+                        overstayTick = 0
+                        AutoCheckInCoordinator.checkOverstay(this@RideTrackerService)
+                        if (AutoCheckInCoordinator.activeStopTimer.value != null) {
+                            val st = _liveRideState.value
+                            updateNotification(st.currentSpeedKmh, st.currentAltitude, st.totalDistanceKm)
+                        }
+                    }
                 }
             }
         }
@@ -320,17 +342,22 @@ class RideTrackerService : Service(), LocationListener {
                 )
             )
 
-            // Kiểm tra Auto Check-in (< 250m)
-            val approaching = MilestoneDetector.detectApproachingPlace(lat, lng, cachedPlaces)
-            var lastVisited: String? = null
-            if (approaching != null) {
-                database.togglePlaceVisited(approaching.id, true)
+            // Hợp nhất Auto Check-in (<= 250m) + Auto Pit-Stop Timer + Thông báo màn hình khóa
+            val checkedInPlace = AutoCheckInCoordinator.processLocation(
+                context = this@RideTrackerService,
+                database = database,
+                lat = lat,
+                lng = lng,
+                speedKmh = speedKmh,
+                allPlaces = cachedPlaces,
+                vehicle = cachedVehicle
+            )
+            if (checkedInPlace != null) {
                 cachedPlaces = database.getAllPlaces()
-                lastVisited = approaching.name
             }
 
-            // Tìm điểm đến kế tiếp
-            val nextMilestone = MilestoneDetector.findNextMilestone(lat, lng, cachedPlaces, VehicleType.MOTORBIKE)
+            // Tìm điểm đến kế tiếp theo đúng phương tiện
+            val nextMilestone = MilestoneDetector.findNextMilestone(lat, lng, cachedPlaces, cachedVehicle)
 
             withContext(Dispatchers.Main) {
                 _liveRideState.value = _liveRideState.value.copy(
@@ -342,7 +369,7 @@ class RideTrackerService : Service(), LocationListener {
                     nextMilestonePlace = nextMilestone?.first,
                     distanceToNextKm = nextMilestone?.second ?: 0.0,
                     recentPoints = recentPoints.toList(),
-                    lastVisitedPlaceName = lastVisited ?: _liveRideState.value.lastVisitedPlaceName
+                    lastVisitedPlaceName = checkedInPlace?.name ?: _liveRideState.value.lastVisitedPlaceName
                 )
             }
         }
@@ -381,8 +408,17 @@ class RideTrackerService : Service(), LocationListener {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val statusText = if (isPaused) "Đang tạm dừng chặng"
-        else "Vận tốc: ${speedKmh.toInt()} km/h • Cao độ: ${altitude.toInt()}m • Đã đi: ${String.format(java.util.Locale.US, "%.1f", distanceKm)} km"
+        val activeStop = AutoCheckInCoordinator.activeStopTimer.value
+        val statusText = when {
+            isPaused -> "Đang tạm dừng chặng"
+            activeStop != null -> {
+                val elapsedMin = ((System.currentTimeMillis() - activeStop.startedAtMillis) / 60_000L).toInt().coerceAtLeast(0)
+                val remainMin = activeStop.targetDurationMin - elapsedMin
+                val timerStr = if (remainMin >= 0) "còn ${remainMin}p" else "lố ${-remainMin}p"
+                "⏱️ Đang dừng tại ${activeStop.placeName} ($timerStr) • Đã đi: ${String.format(java.util.Locale.US, "%.1f", distanceKm)} km"
+            }
+            else -> "Vận tốc: ${speedKmh.toInt()} km/h • Cao độ: ${altitude.toInt()}m • Đã đi: ${String.format(java.util.Locale.US, "%.1f", distanceKm)} km"
+        }
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Hà Giang Go • Đang ghi hành trình")

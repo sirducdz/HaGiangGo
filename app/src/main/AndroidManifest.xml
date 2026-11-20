@@ -65,6 +65,10 @@
             android:name=".service.RideTrackerService"
             android:foregroundServiceType="location"
             android:exported="false" />
+
+        <receiver
+            android:name=".service.PacerActionReceiver"
+            android:exported="false" />
     </application>
 
 </manifest>

@@ -152,6 +152,10 @@ class HaGiangRepository(private val context: Context) {
         _rideStats.value = db.getRideSummaryStats()
     }
 
+    suspend fun refreshPlaces() = withContext(Dispatchers.IO) {
+        _places.value = db.getAllPlaces()
+    }
+
     suspend fun getCachedWeatherRaw(): Map<String, Pair<String, Long>> = withContext(Dispatchers.IO) {
         db.getAllWeatherCache()
     }
