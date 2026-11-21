@@ -424,5 +424,39 @@ data class DayPacingSummary(
     val canAutoTrim: Boolean = false
 )
 
+enum class GoldenHourMatch {
+    OPTIMAL,
+    SUBOPTIMAL_EARLY,
+    SUBOPTIMAL_LATE
+}
+
+data class GoldenHourProfile(
+    val bestStartMin: Int,
+    val bestEndMin: Int,
+    val windowLabel: String,
+    val lightingReason: String,
+    val photoAngleTip: String
+)
+
+data class GoldenHourAssessment(
+    val profile: GoldenHourProfile,
+    val match: GoldenHourMatch,
+    val statusLabel: String,
+    val detailHint: String
+)
+
+enum class WatermarkStyle(val title: String) {
+    FULL_TELEMETRY("Đầy đủ Telemetry"),
+    MINIMAL("Tối giản")
+}
+
+data class QuickSnapRequest(
+    val place: Place? = null,
+    val dayNumber: Int = 1,
+    val zoneId: String = "tp_ha_giang",
+    val defaultTitle: String = ""
+)
+
+
 
 

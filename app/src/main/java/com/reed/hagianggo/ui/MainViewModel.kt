@@ -9,6 +9,7 @@ import com.reed.hagianggo.data.JsonBackupManager
 import com.reed.hagianggo.domain.AutoCheckInCoordinator
 import com.reed.hagianggo.domain.AutoCheckInEvent
 import com.reed.hagianggo.domain.FuelRangeGuard
+import com.reed.hagianggo.domain.ItineraryEditorLogic
 import com.reed.hagianggo.domain.LocationMath
 import com.reed.hagianggo.domain.MountainWeatherManager
 import com.reed.hagianggo.domain.OfflineLocationTracker
@@ -39,6 +40,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val places = repository.places
     val tripConfig = repository.tripConfig
     val itinerarySlots = repository.itinerarySlots
+    val activePlanCode = repository.activePlanCode
+    val isItineraryCustomized = repository.isItineraryCustomized
     val expenses = repository.expenses
     val journal = repository.journal
     val checklist = repository.checklist
@@ -87,6 +90,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _preferredMapLayer = MutableStateFlow<MapLayerStyle?>(null)
     val preferredMapLayer: StateFlow<MapLayerStyle?> = _preferredMapLayer.asStateFlow()
+
+    private val _quickSnapRequest = MutableStateFlow<QuickSnapRequest?>(null)
+    val quickSnapRequest: StateFlow<QuickSnapRequest?> = _quickSnapRequest.asStateFlow()
+
+    private var pendingItineraryTarget: Pair<Int, TimeSlot>? = null
 
     // ====== Smart Time Pacer & Zero-Touch Auto Live Pacing State ======
     private val _dayStartMinutes = MutableStateFlow(7 * 60 + 30) // Mặc định xuất phát 07:30 sáng
@@ -376,8 +384,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun savePlace(place: Place) {
         viewModelScope.launch {
             repository.savePlace(place)
-            closePlaceFormDialog()
-            showNotification("Đã lưu địa điểm: ${place.name}")
+            val target = pendingItineraryTarget
+            if (target != null) {
+                pendingItineraryTarget = null
+                val updated = ItineraryEditorLogic.addPlace(
+                    slots = itinerarySlots.value,
+                    planCode = activePlanCode.value,
+                    dayNumber = target.first,
+                    targetSlot = target.second,
+                    placeId = place.id
+                )
+                repository.saveCustomItinerary(updated)
+                closePlaceFormDialog()
+                showNotification("Đã lưu '${place.name}' & thêm vào Ngày ${target.first}!")
+            } else {
+                closePlaceFormDialog()
+                showNotification("Đã lưu địa điểm: ${place.name}")
+            }
         }
     }
 
@@ -511,7 +534,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             expenses = expenses.value,
             checklist = checklist.value,
             journal = journal.value,
-            members = members.value
+            members = members.value,
+            itinerarySlots = itinerarySlots.value
         )
     }
 
@@ -894,6 +918,95 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun cancelPitStopTimer() {
         AutoCheckInCoordinator.cancelPitStop(getApplication())
+    }
+
+    // ====== Custom Itinerary Editor Actions ======
+
+    fun addPlaceToItinerary(dayNumber: Int, slot: TimeSlot, placeId: String) {
+        viewModelScope.launch {
+            val updated = ItineraryEditorLogic.addPlace(
+                slots = itinerarySlots.value,
+                planCode = activePlanCode.value,
+                dayNumber = dayNumber,
+                targetSlot = slot,
+                placeId = placeId
+            )
+            repository.saveCustomItinerary(updated)
+            val name = places.value.firstOrNull { it.id == placeId }?.name ?: "điểm mới"
+            showNotification("✓ Đã thêm '$name' vào ${slot.label} Ngày $dayNumber")
+        }
+    }
+
+    fun removePlaceFromItinerary(dayNumber: Int, placeId: String) {
+        viewModelScope.launch {
+            val updated = ItineraryEditorLogic.removePlace(itinerarySlots.value, dayNumber, placeId)
+            repository.saveCustomItinerary(updated)
+            val name = places.value.firstOrNull { it.id == placeId }?.name ?: "điểm"
+            showNotification("Đã gỡ '$name' khỏi lịch Ngày $dayNumber")
+        }
+    }
+
+    fun moveItineraryPlace(dayNumber: Int, placeId: String, direction: Int) {
+        viewModelScope.launch {
+            val updated = ItineraryEditorLogic.movePlaceWithinDay(
+                slots = itinerarySlots.value,
+                planCode = activePlanCode.value,
+                dayNumber = dayNumber,
+                placeId = placeId,
+                direction = direction
+            )
+            if (updated != itinerarySlots.value) {
+                repository.saveCustomItinerary(updated)
+            }
+        }
+    }
+
+    fun moveItineraryPlaceToDaySlot(fromDay: Int, toDay: Int, toSlot: TimeSlot, placeId: String) {
+        viewModelScope.launch {
+            val updated = ItineraryEditorLogic.movePlaceToDaySlot(
+                slots = itinerarySlots.value,
+                planCode = activePlanCode.value,
+                fromDay = fromDay,
+                toDay = toDay,
+                toSlot = toSlot,
+                placeId = placeId
+            )
+            repository.saveCustomItinerary(updated)
+            val name = places.value.firstOrNull { it.id == placeId }?.name ?: "điểm"
+            showNotification("Đã chuyển '$name' sang ${toSlot.label} Ngày $toDay")
+        }
+    }
+
+    fun resetItineraryToDefault() {
+        viewModelScope.launch {
+            repository.resetItineraryToDefault()
+            showNotification("↩️ Đã khôi phục lịch trình mẫu Hà Giang chuẩn!")
+        }
+    }
+
+    fun openAddCustomPlaceForItinerary(dayNumber: Int, slot: TimeSlot) {
+        pendingItineraryTarget = dayNumber to slot
+        openAddPlaceDialog()
+    }
+
+    // ====== Quick Snap (Altitude & GPS Watermark Photo) ======
+
+    fun openQuickSnap(
+        place: Place? = null,
+        dayNumber: Int = tripConfig.value.currentDay,
+        zoneId: String? = null
+    ) {
+        val resolvedZone = place?.zoneId ?: zoneId ?: activeZone.value?.id ?: "tp_ha_giang"
+        _quickSnapRequest.value = QuickSnapRequest(
+            place = place,
+            dayNumber = dayNumber.coerceIn(1, tripConfig.value.durationDays),
+            zoneId = resolvedZone,
+            defaultTitle = ""
+        )
+    }
+
+    fun closeQuickSnap() {
+        _quickSnapRequest.value = null
     }
 
     private fun showNotification(msg: String) {

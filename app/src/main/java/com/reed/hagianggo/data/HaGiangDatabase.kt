@@ -12,7 +12,7 @@ class HaGiangDatabase(private val context: Context) :
 
     companion object {
         const val DATABASE_NAME = "hagiang_go.db"
-        const val DATABASE_VERSION = 4
+        const val DATABASE_VERSION = 5
 
         @Volatile
         private var INSTANCE: HaGiangDatabase? = null
@@ -174,6 +174,18 @@ class HaGiangDatabase(private val context: Context) :
         db.insert("trip_config", null, configValues)
 
         ensureAdventurePackTables(db)
+        ensureItineraryMetaTable(db)
+    }
+
+    private fun ensureItineraryMetaTable(db: SQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS itinerary_meta (
+                plan_code TEXT PRIMARY KEY,
+                is_customized INTEGER DEFAULT 0
+            )
+            """.trimIndent()
+        )
     }
 
     private fun ensureAdventurePackTables(db: SQLiteDatabase) {
@@ -264,6 +276,9 @@ class HaGiangDatabase(private val context: Context) :
                 db.execSQL("ALTER TABLE expenses ADD COLUMN split_ids TEXT DEFAULT ''")
             } catch (_: Exception) {}
         }
+        if (oldVersion < 5) {
+            ensureItineraryMetaTable(db)
+        }
     }
 
     fun seedIfEmpty() {
@@ -338,27 +353,38 @@ class HaGiangDatabase(private val context: Context) :
                     }
                 }
 
-                // 3. Đồng bộ lịch trình chuẩn (Itineraries) để bao gồm các mốc mới chính xác
+                // 3. Đồng bộ lịch trình chuẩn cho những plan CHƯA được người dùng tùy biến
                 val itinerariesArray = root.optJSONArray("default_itineraries")
                 if (itinerariesArray != null) {
-                    db.delete("itinerary_slots", null, null)
+                    val groupedByPlan = linkedMapOf<String, MutableList<JSONObject>>()
                     for (i in 0 until itinerariesArray.length()) {
                         val obj = itinerariesArray.getJSONObject(i)
-                        val placeIdsArray = obj.optJSONArray("suggestedPlaceIds")
-                        val placeIds = mutableListOf<String>()
-                        if (placeIdsArray != null) {
-                            for (p in 0 until placeIdsArray.length()) {
-                                placeIds.add(placeIdsArray.getString(p))
+                        val code = obj.getString("planCode")
+                        groupedByPlan.getOrPut(code) { mutableListOf() }.add(obj)
+                    }
+                    for ((code, items) in groupedByPlan) {
+                        val customized = isPlanCustomizedInternal(db, code)
+                        val existingCount = getPlanSlotCountInternal(db, code)
+                        if (!customized || existingCount == 0) {
+                            db.delete("itinerary_slots", "plan_code = ?", arrayOf(code))
+                            for (obj in items) {
+                                val placeIdsArray = obj.optJSONArray("suggestedPlaceIds")
+                                val placeIds = mutableListOf<String>()
+                                if (placeIdsArray != null) {
+                                    for (p in 0 until placeIdsArray.length()) {
+                                        placeIds.add(placeIdsArray.getString(p))
+                                    }
+                                }
+                                val cv = ContentValues().apply {
+                                    put("plan_code", code)
+                                    put("day_number", obj.getInt("dayNumber"))
+                                    put("slot", obj.getString("slot"))
+                                    put("title", obj.getString("title"))
+                                    put("suggested_place_ids", placeIds.joinToString(","))
+                                }
+                                db.insert("itinerary_slots", null, cv)
                             }
                         }
-                        val cv = ContentValues().apply {
-                            put("plan_code", obj.getString("planCode"))
-                            put("day_number", obj.getInt("dayNumber"))
-                            put("slot", obj.getString("slot"))
-                            put("title", obj.getString("title"))
-                            put("suggested_place_ids", placeIds.joinToString(","))
-                        }
-                        db.insert("itinerary_slots", null, cv)
                     }
                 }
 
@@ -560,6 +586,91 @@ class HaGiangDatabase(private val context: Context) :
         }
         cursor.close()
         return list
+    }
+
+    private fun isPlanCustomizedInternal(db: SQLiteDatabase, planCode: String): Boolean {
+        val cursor = db.rawQuery("SELECT is_customized FROM itinerary_meta WHERE plan_code = ?", arrayOf(planCode))
+        val customized = cursor.use {
+            if (it.moveToFirst()) it.getInt(0) == 1 else false
+        }
+        return customized
+    }
+
+    private fun getPlanSlotCountInternal(db: SQLiteDatabase, planCode: String): Int {
+        val cursor = db.rawQuery("SELECT COUNT(*) FROM itinerary_slots WHERE plan_code = ?", arrayOf(planCode))
+        return cursor.use {
+            if (it.moveToFirst()) it.getInt(0) else 0
+        }
+    }
+
+    fun isPlanCustomized(planCode: String): Boolean {
+        return isPlanCustomizedInternal(readableDatabase, planCode)
+    }
+
+    fun replacePlanSlots(planCode: String, slots: List<ItinerarySlot>, markCustomized: Boolean = true) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.delete("itinerary_slots", "plan_code = ?", arrayOf(planCode))
+            for (item in slots) {
+                val cv = ContentValues().apply {
+                    put("plan_code", planCode)
+                    put("day_number", item.dayNumber)
+                    put("slot", item.slot.code)
+                    put("title", item.title)
+                    put("suggested_place_ids", item.suggestedPlaceIds.joinToString(","))
+                }
+                db.insert("itinerary_slots", null, cv)
+            }
+            val metaCv = ContentValues().apply {
+                put("plan_code", planCode)
+                put("is_customized", if (markCustomized) 1 else 0)
+            }
+            db.insertWithOnConflict("itinerary_meta", null, metaCv, SQLiteDatabase.CONFLICT_REPLACE)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    fun resetItineraryToDefault(planCode: String) {
+        try {
+            val jsonString = context.assets.open("hagiang_seed.json").bufferedReader().use { it.readText() }
+            val root = JSONObject(jsonString)
+            val itinerariesArray = root.optJSONArray("default_itineraries") ?: return
+
+            val allSeeded = mutableListOf<ItinerarySlot>()
+            for (i in 0 until itinerariesArray.length()) {
+                val obj = itinerariesArray.getJSONObject(i)
+                val placeIdsArray = obj.optJSONArray("suggestedPlaceIds")
+                val placeIds = mutableListOf<String>()
+                if (placeIdsArray != null) {
+                    for (p in 0 until placeIdsArray.length()) {
+                        placeIds.add(placeIdsArray.getString(p))
+                    }
+                }
+                allSeeded.add(
+                    ItinerarySlot(
+                        planCode = obj.getString("planCode"),
+                        dayNumber = obj.getInt("dayNumber"),
+                        slot = TimeSlot.fromCode(obj.getString("slot")),
+                        title = obj.getString("title"),
+                        suggestedPlaceIds = placeIds
+                    )
+                )
+            }
+
+            val exact = allSeeded.filter { it.planCode == planCode }
+            val fallbackCode = if (planCode.startsWith("4N3D")) "4N3D_MOTORBIKE" else "3N2D_MOTORBIKE"
+            val matched = exact.ifEmpty {
+                allSeeded.filter { it.planCode == fallbackCode }.map { it.copy(planCode = planCode) }
+            }
+            if (matched.isNotEmpty()) {
+                replacePlanSlots(planCode, matched, markCustomized = false)
+            }
+        } catch (_: Exception) {
+            // Ignore fallback
+        }
     }
 
     // ====== Expenses ======

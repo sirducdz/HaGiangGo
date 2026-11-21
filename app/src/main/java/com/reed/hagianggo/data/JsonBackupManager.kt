@@ -12,7 +12,8 @@ object JsonBackupManager {
         expenses: List<Expense>,
         checklist: List<ChecklistItem>,
         journal: List<JournalEntry>,
-        members: List<TripMember> = emptyList()
+        members: List<TripMember> = emptyList(),
+        itinerarySlots: List<ItinerarySlot> = emptyList()
     ): String {
         val root = JSONObject()
 
@@ -110,6 +111,22 @@ object JsonBackupManager {
             journalArray.put(jObj)
         }
         root.put("journal", journalArray)
+
+        // 6. Custom Itinerary Slots
+        if (itinerarySlots.isNotEmpty()) {
+            val itinArray = JSONArray()
+            for (s in itinerarySlots) {
+                val sObj = JSONObject().apply {
+                    put("planCode", s.planCode)
+                    put("dayNumber", s.dayNumber)
+                    put("slot", s.slot.code)
+                    put("title", s.title)
+                    put("suggestedPlaceIds", JSONArray(s.suggestedPlaceIds))
+                }
+                itinArray.put(sObj)
+            }
+            root.put("itinerary_slots", itinArray)
+        }
 
         return root.toString(2)
     }
@@ -209,13 +226,38 @@ object JsonBackupManager {
             }
         }
 
-        return ImportPayload(places, expenses, checklist, members)
+        val itinerarySlots = mutableListOf<ItinerarySlot>()
+        val itinArray = root.optJSONArray("itinerary_slots")
+        if (itinArray != null) {
+            for (i in 0 until itinArray.length()) {
+                val obj = itinArray.getJSONObject(i)
+                val idsArr = obj.optJSONArray("suggestedPlaceIds")
+                val ids = mutableListOf<String>()
+                if (idsArr != null) {
+                    for (p in 0 until idsArr.length()) {
+                        ids.add(idsArr.getString(p))
+                    }
+                }
+                itinerarySlots.add(
+                    ItinerarySlot(
+                        planCode = obj.getString("planCode"),
+                        dayNumber = obj.getInt("dayNumber"),
+                        slot = TimeSlot.fromCode(obj.getString("slot")),
+                        title = obj.optString("title", ""),
+                        suggestedPlaceIds = ids
+                    )
+                )
+            }
+        }
+
+        return ImportPayload(places, expenses, checklist, members, itinerarySlots)
     }
 
     data class ImportPayload(
         val places: List<Place>,
         val expenses: List<Expense>,
         val checklist: List<ChecklistItem>,
-        val members: List<TripMember> = emptyList()
+        val members: List<TripMember> = emptyList(),
+        val itinerarySlots: List<ItinerarySlot> = emptyList()
     )
 }

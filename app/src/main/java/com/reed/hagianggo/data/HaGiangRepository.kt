@@ -24,6 +24,12 @@ class HaGiangRepository(private val context: Context) {
     private val _itinerarySlots = MutableStateFlow<List<ItinerarySlot>>(emptyList())
     val itinerarySlots: StateFlow<List<ItinerarySlot>> = _itinerarySlots.asStateFlow()
 
+    private val _activePlanCode = MutableStateFlow("3N2D_MOTORBIKE")
+    val activePlanCode: StateFlow<String> = _activePlanCode.asStateFlow()
+
+    private val _isItineraryCustomized = MutableStateFlow(false)
+    val isItineraryCustomized: StateFlow<Boolean> = _isItineraryCustomized.asStateFlow()
+
     private val _expenses = MutableStateFlow<List<Expense>>(emptyList())
     val expenses: StateFlow<List<Expense>> = _expenses.asStateFlow()
 
@@ -47,13 +53,21 @@ class HaGiangRepository(private val context: Context) {
         reloadAll()
     }
 
+    private fun resolvePlanCode(config: TripConfig): String {
+        val exact = "${config.duration.code}_${config.vehicle.code}"
+        if (db.getItinerarySlots(exact).isNotEmpty()) return exact
+        return if (config.duration == TripDuration.DAYS_4_NIGHTS_3) "4N3D_MOTORBIKE" else "3N2D_MOTORBIKE"
+    }
+
     suspend fun reloadAll() = withContext(Dispatchers.IO) {
         _zones.value = db.getAllZones()
         _places.value = db.getAllPlaces()
         val config = db.getTripConfig()
         _tripConfig.value = config
-        _itinerarySlots.value = db.getItinerarySlots("${config.duration.code}_${config.vehicle.code}")
-            .ifEmpty { db.getItinerarySlots("3N2D_MOTORBIKE") }
+        val resolvedCode = resolvePlanCode(config)
+        _activePlanCode.value = resolvedCode
+        _itinerarySlots.value = db.getItinerarySlots(resolvedCode)
+        _isItineraryCustomized.value = db.isPlanCustomized(resolvedCode)
         _expenses.value = db.getAllExpenses()
         _journal.value = db.getAllJournalEntries()
         _checklist.value = db.getAllChecklistItems()
@@ -65,8 +79,24 @@ class HaGiangRepository(private val context: Context) {
     suspend fun updateTripConfig(config: TripConfig) = withContext(Dispatchers.IO) {
         db.updateTripConfig(config)
         _tripConfig.value = config
-        _itinerarySlots.value = db.getItinerarySlots("${config.duration.code}_${config.vehicle.code}")
-            .ifEmpty { db.getItinerarySlots("3N2D_MOTORBIKE") }
+        val resolvedCode = resolvePlanCode(config)
+        _activePlanCode.value = resolvedCode
+        _itinerarySlots.value = db.getItinerarySlots(resolvedCode)
+        _isItineraryCustomized.value = db.isPlanCustomized(resolvedCode)
+    }
+
+    suspend fun saveCustomItinerary(updatedSlots: List<ItinerarySlot>) = withContext(Dispatchers.IO) {
+        val code = _activePlanCode.value
+        db.replacePlanSlots(code, updatedSlots, markCustomized = true)
+        _itinerarySlots.value = db.getItinerarySlots(code)
+        _isItineraryCustomized.value = true
+    }
+
+    suspend fun resetItineraryToDefault() = withContext(Dispatchers.IO) {
+        val code = _activePlanCode.value
+        db.resetItineraryToDefault(code)
+        _itinerarySlots.value = db.getItinerarySlots(code)
+        _isItineraryCustomized.value = db.isPlanCustomized(code)
     }
 
     suspend fun savePlace(place: Place) = withContext(Dispatchers.IO) {
@@ -178,6 +208,12 @@ class HaGiangRepository(private val context: Context) {
             }
             for (c in payload.checklist) {
                 db.insertChecklistItem(c)
+            }
+            if (payload.itinerarySlots.isNotEmpty()) {
+                val byPlan = payload.itinerarySlots.groupBy { it.planCode }
+                for ((code, slotsForPlan) in byPlan) {
+                    db.replacePlanSlots(code, slotsForPlan, markCustomized = true)
+                }
             }
             reloadAll()
             true

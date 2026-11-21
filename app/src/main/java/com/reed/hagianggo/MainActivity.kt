@@ -84,6 +84,7 @@ class MainActivity : ComponentActivity() {
                 val isOutsideHaGiang by viewModel.isOutsideHaGiang.collectAsState()
                 val liveRideState by viewModel.liveRideState.collectAsState()
                 val isCockpitOpen by viewModel.isCockpitOpen.collectAsState()
+                val quickSnapRequest by viewModel.quickSnapRequest.collectAsState()
                 val notificationMessage by viewModel.notificationMessage.collectAsState()
 
                 var showGlobalZonePicker by remember { mutableStateOf(false) }
@@ -357,6 +358,28 @@ class MainActivity : ComponentActivity() {
                         onCancelDownload = { viewModel.cancelOfflineMapDownload() },
                         onPreviewOfflineLayer = { viewModel.previewOfflineTopoLayer() },
                         onDismiss = { viewModel.closeOfflineMapDialog() }
+                    )
+                }
+
+                // Bottom Sheet: Chụp nhanh gắn Watermark Độ cao & Tọa độ GPS
+                quickSnapRequest?.let { req ->
+                    QuickSnapSheet(
+                        request = req,
+                        zones = zones,
+                        currentLat = currentLocation?.first,
+                        currentLng = currentLocation?.second,
+                        liveAltitudeM = if (liveRideState.isTracking && liveRideState.currentAltitude > 10) {
+                            liveRideState.currentAltitude.toInt()
+                        } else {
+                            0
+                        },
+                        onSaveToJournal = { placeId, dayNum, zId, contentText, savedPhotoPath ->
+                            viewModel.addJournalEntry(placeId, dayNum, zId, contentText, savedPhotoPath)
+                            viewModel.closeQuickSnap()
+                            viewModel.notifyMessage("📷 Đã lưu ảnh gắn Watermark vào Nhật ký!")
+                        },
+                        onNotify = { msg -> viewModel.notifyMessage(msg) },
+                        onDismiss = { viewModel.closeQuickSnap() }
                     )
                 }
             }

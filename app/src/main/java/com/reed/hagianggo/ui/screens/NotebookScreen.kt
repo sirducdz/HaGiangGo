@@ -74,6 +74,7 @@ fun NotebookScreen(
     val checklist by viewModel.checklist.collectAsState()
     val journal by viewModel.journal.collectAsState()
     val zones by viewModel.zones.collectAsState()
+    val activeZone by viewModel.activeZone.collectAsState()
     val members by viewModel.members.collectAsState()
     val memberBalances by viewModel.memberBalances.collectAsState()
     val settlementTransfers by viewModel.settlementTransfers.collectAsState()
@@ -180,6 +181,13 @@ fun NotebookScreen(
                     zones = zones,
                     bottomClearance = bottomClearance,
                     onAddJournalClick = { showAddJournalDialog = true },
+                    onQuickSnapClick = {
+                        viewModel.openQuickSnap(
+                            dayNumber = tripConfig.currentDay,
+                            zoneId = activeZone?.id ?: "tp_ha_giang"
+                        )
+                    },
+                    onNotify = { viewModel.notifyMessage(it) },
                     onDeleteJournal = { viewModel.deleteJournalEntry(it) },
                     onOpenRecapPoster = { viewModel.openRecapSheet() }
                 )
@@ -1107,11 +1115,14 @@ fun JournalTabContent(
     zones: List<Zone>,
     bottomClearance: Dp,
     onAddJournalClick: () -> Unit,
+    onQuickSnapClick: () -> Unit = {},
+    onNotify: (String) -> Unit = {},
     onDeleteJournal: (Long) -> Unit,
     onOpenRecapPoster: () -> Unit = {}
 ) {
     val zonesById = remember(zones) { zones.associateBy { it.id } }
     val dateFormatter = remember { SimpleDateFormat("HH:mm • dd/MM", Locale.getDefault()) }
+    var fullscreenPhotoInfo by remember { mutableStateOf<Pair<String, String>?>(null) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
@@ -1124,6 +1135,50 @@ fun JournalTabContent(
             ),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            item(key = "journal_quicksnap_banner") {
+                ShadcnCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    backgroundColor = SkyTelemetrySoft,
+                    borderColor = SkyTelemetryBorder,
+                    onClick = onQuickSnapClick
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(SkyTelemetry),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.PhotoCamera, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "CHỤP NHANH GẮN WATERMARK ĐỘ CAO",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Black),
+                                    color = SkyTelemetry
+                                )
+                                Text(
+                                    text = "Tự đóng dấu Tên đèo • Cao độ (m) • Tọa độ GPS",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSecondary
+                                )
+                            }
+                        }
+                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = SkyTelemetry)
+                    }
+                }
+            }
+
             item(key = "journal_poster_banner") {
                 ShadcnCard(
                     modifier = Modifier.fillMaxWidth(),
@@ -1278,23 +1333,13 @@ fun JournalTabContent(
 
                             if (!entry.photoPath.isNullOrBlank()) {
                                 Spacer(modifier = Modifier.height(10.dp))
-                                Row(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(SurfaceMuted)
-                                        .border(BorderStroke(1.dp, BorderSubtle), RoundedCornerShape(10.dp))
-                                        .padding(horizontal = 10.dp, vertical = 7.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(Icons.Default.Photo, contentDescription = null, tint = ElectricOrange, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = "Ảnh đính kèm: ${File(entry.photoPath).name}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = TextSecondary,
-                                        maxLines = 1
-                                    )
-                                }
+                                JournalPhotoThumbnail(
+                                    photoPath = entry.photoPath,
+                                    onClick = {
+                                        val title = zonesById[entry.zoneId]?.name ?: "Hà Giang"
+                                        fullscreenPhotoInfo = entry.photoPath to title
+                                    }
+                                )
                             }
                         }
                     }
@@ -1309,6 +1354,15 @@ fun JournalTabContent(
             onClick = onAddJournalClick,
             modifier = Modifier.align(Alignment.BottomEnd)
         )
+
+        fullscreenPhotoInfo?.let { (path, title) ->
+            FullscreenPhotoDialog(
+                photoPath = path,
+                title = title,
+                onNotify = onNotify,
+                onDismiss = { fullscreenPhotoInfo = null }
+            )
+        }
     }
 }
 

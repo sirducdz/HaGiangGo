@@ -35,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.reed.hagianggo.domain.GoldenHourAdvisor
 import com.reed.hagianggo.domain.LocationMath
 import com.reed.hagianggo.domain.TimePacerEngine
 import com.reed.hagianggo.model.*
@@ -56,6 +57,7 @@ fun TodayScreen(
     val zones by viewModel.zones.collectAsState()
     val places by viewModel.places.collectAsState()
     val itinerarySlots by viewModel.itinerarySlots.collectAsState()
+    val isItineraryCustomized by viewModel.isItineraryCustomized.collectAsState()
     val activeZone by viewModel.activeZone.collectAsState()
     val currentLocation by viewModel.currentLocation.collectAsState()
     val isOutsideHaGiang by viewModel.isOutsideHaGiang.collectAsState()
@@ -74,6 +76,11 @@ fun TodayScreen(
 
     var selectedDay by remember { mutableIntStateOf(1) }
     var highlightedPlaceId by remember { mutableStateOf<String?>(null) }
+    var isEditItineraryMode by remember { mutableStateOf(false) }
+    var showAddPlacePicker by remember { mutableStateOf(false) }
+    var pickerDefaultSlot by remember { mutableStateOf(TimeSlot.MORNING) }
+    var movingPlaceState by remember { mutableStateOf<Pair<Place, TimeSlot>?>(null) }
+    var showResetConfirmDialog by remember { mutableStateOf(false) }
 
     val currentTotalMinutes = liveClockMinutes
     val sunsetMinutes = config.sunsetCutoffHour * 60 + config.sunsetCutoffMinute
@@ -717,6 +724,76 @@ fun TodayScreen(
             }
         }
 
+        // Thanh công cụ Sửa Lịch Trình Cá Nhân gọn (Progressive Disclosure)
+        item(key = "itinerary_editor_toolbar") {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (isEditItineraryMode) ElectricOrange else SurfaceWhite)
+                            .border(
+                                BorderStroke(1.dp, if (isEditItineraryMode) ElectricOrangeHover else BorderSubtle),
+                                RoundedCornerShape(10.dp)
+                            )
+                            .springClickable { isEditItineraryMode = !isEditItineraryMode }
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = if (isEditItineraryMode) "✓ Xong sửa" else "✏️ Sửa lịch trình",
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isEditItineraryMode) Color.White else TextPrimary
+                        )
+                    }
+
+                    if (isEditItineraryMode && isItineraryCustomized) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(RoseDestructiveSoft)
+                                .border(BorderStroke(1.dp, RoseDestructiveBorder), RoundedCornerShape(10.dp))
+                                .springClickable { showResetConfirmDialog = true }
+                                .padding(horizontal = 9.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = "Khôi phục mẫu",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = RoseDestructiveText
+                            )
+                        }
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(SkyTelemetrySoft)
+                        .border(BorderStroke(1.dp, SkyTelemetryBorder), RoundedCornerShape(10.dp))
+                        .springClickable {
+                            pickerDefaultSlot = TimeSlot.MORNING
+                            showAddPlacePicker = true
+                        }
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = "+ Thêm điểm",
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SkyTelemetry
+                    )
+                }
+            }
+        }
+
         // =====================================================================
         // 4. BIỂU ĐỒ MẶT CẮT ĐỘ CAO ĐÈO ĐỘNG (ALLTRAILS ELEVATION PROFILE)
         // =====================================================================
@@ -793,12 +870,30 @@ fun TodayScreen(
 
             if (placesForSlot.isEmpty()) {
                 item(key = "empty_${selectedDay}_${slot.name}") {
-                    Text(
-                        text = "Linh hoạt nghỉ ngơi trong ${slot.label.lowercase()}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextMuted,
-                        modifier = Modifier.padding(start = 28.dp, bottom = 4.dp)
-                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 28.dp, bottom = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Linh hoạt nghỉ ngơi trong ${slot.label.lowercase()}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextMuted
+                        )
+                        if (isEditItineraryMode) {
+                            Text(
+                                text = "+ Thêm vào buổi này",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = SkyTelemetry,
+                                modifier = Modifier.clickable {
+                                    pickerDefaultSlot = slot
+                                    showAddPlacePicker = true
+                                }
+                            )
+                        }
+                    }
                 }
             } else {
                 items(
@@ -807,13 +902,26 @@ fun TodayScreen(
                 ) { (slotItem, place) ->
                     val scheduledNode = scheduledNodeById[place.id]
                     val isTimerRunningHere = activeStopTimer?.placeId == place.id
+                    val goldenHour = if (scheduledNode != null &&
+                        scheduledNode.status != StopPacingStatus.SKIPPED &&
+                        !place.isVisited
+                    ) {
+                        GoldenHourAdvisor.evaluate(
+                            place = place,
+                            arrivalMin = scheduledNode.arrivalMinutesOfDay,
+                            departMin = scheduledNode.departureMinutesOfDay
+                        )
+                    } else null
+
                     ItineraryPlaceCard(
                         place = place,
                         customNote = slotItem.title,
                         scheduledNode = scheduledNode,
+                        goldenHour = goldenHour,
                         vehicle = config.vehicle,
                         isTimerRunningHere = isTimerRunningHere,
                         isHighlighted = highlightedPlaceId == place.id,
+                        isEditMode = isEditItineraryMode,
                         onNavigate = {
                             LocationMath.openNavigationIntent(context, place.latitude, place.longitude, place.name)
                         },
@@ -821,6 +929,17 @@ fun TodayScreen(
                         onAdjustStayMin = { delta -> viewModel.adjustPlaceStayDuration(place.id, delta) },
                         onStartPitStopTimer = { viewModel.startPitStopTimer(place) },
                         onToggleSkipToday = { viewModel.toggleSkipPlaceToday(place.id) },
+                        onQuickSnap = {
+                            viewModel.openQuickSnap(
+                                place = place,
+                                dayNumber = selectedDay,
+                                zoneId = place.zoneId
+                            )
+                        },
+                        onMoveUp = { viewModel.moveItineraryPlace(selectedDay, place.id, -1) },
+                        onMoveDown = { viewModel.moveItineraryPlace(selectedDay, place.id, 1) },
+                        onMoveDaySlot = { movingPlaceState = place to slot },
+                        onRemoveFromDay = { viewModel.removePlaceFromItinerary(selectedDay, place.id) },
                         onCall = {
                             if (place.phoneNumber.isNotBlank()) {
                                 LocationMath.openDialerIntent(context, place.phoneNumber)
@@ -831,6 +950,84 @@ fun TodayScreen(
                 }
             }
         }
+    }
+
+    if (showAddPlacePicker) {
+        val existingDayIds = remember(orderedDayPlaces) { orderedDayPlaces.map { it.id }.toSet() }
+        ItineraryPlacePickerSheet(
+            dayNumber = selectedDay,
+            initialSlot = pickerDefaultSlot,
+            places = places,
+            zones = zones,
+            existingDayPlaceIds = existingDayIds,
+            onSelectPlace = { placeId, targetSlot ->
+                viewModel.addPlaceToItinerary(selectedDay, targetSlot, placeId)
+                showAddPlacePicker = false
+            },
+            onCreateCustomPlace = { targetSlot ->
+                showAddPlacePicker = false
+                viewModel.openAddCustomPlaceForItinerary(selectedDay, targetSlot)
+            },
+            onDismiss = { showAddPlacePicker = false }
+        )
+    }
+
+    movingPlaceState?.let { (placeToMove, currentSlotOfPlace) ->
+        MoveStopDialog(
+            placeName = placeToMove.name,
+            currentDay = selectedDay,
+            currentSlot = currentSlotOfPlace,
+            totalDays = config.durationDays,
+            onConfirm = { targetDay, targetSlot ->
+                viewModel.moveItineraryPlaceToDaySlot(
+                    fromDay = selectedDay,
+                    toDay = targetDay,
+                    toSlot = targetSlot,
+                    placeId = placeToMove.id
+                )
+                movingPlaceState = null
+            },
+            onDismiss = { movingPlaceState = null }
+        )
+    }
+
+    if (showResetConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetConfirmDialog = false },
+            shape = RoundedCornerShape(20.dp),
+            containerColor = SurfaceWhite,
+            title = {
+                Text(
+                    "Khôi phục lịch trình mẫu?",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = TextPrimary
+                )
+            },
+            text = {
+                Text(
+                    "Toàn bộ các điểm bạn vừa thêm, xóa hoặc đảo thứ tự sẽ quay về lịch trình Hà Giang tiêu chuẩn.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary
+                )
+            },
+            confirmButton = {
+                ShadcnButton(
+                    onClick = {
+                        viewModel.resetItineraryToDefault()
+                        isEditItineraryMode = false
+                        showResetConfirmDialog = false
+                    },
+                    variant = ShadcnButtonVariant.Destructive
+                ) {
+                    Text("Khôi phục mẫu")
+                }
+            },
+            dismissButton = {
+                ShadcnButton(onClick = { showResetConfirmDialog = false }, variant = ShadcnButtonVariant.Ghost) {
+                    Text("Giữ nguyên", color = TextSecondary)
+                }
+            }
+        )
     }
 }
 
@@ -1395,20 +1592,28 @@ fun ItineraryPlaceCard(
     place: Place,
     customNote: String,
     scheduledNode: ScheduledStopNode? = null,
+    goldenHour: GoldenHourAssessment? = null,
     vehicle: VehicleType = VehicleType.MOTORBIKE,
     isTimerRunningHere: Boolean = false,
     isHighlighted: Boolean = false,
+    isEditMode: Boolean = false,
     onNavigate: () -> Unit,
     onToggleVisited: () -> Unit,
     onAdjustStayMin: ((Int) -> Unit)? = null,
     onStartPitStopTimer: (() -> Unit)? = null,
     onToggleSkipToday: (() -> Unit)? = null,
+    onQuickSnap: (() -> Unit)? = null,
+    onMoveUp: (() -> Unit)? = null,
+    onMoveDown: (() -> Unit)? = null,
+    onMoveDaySlot: (() -> Unit)? = null,
+    onRemoveFromDay: (() -> Unit)? = null,
     onCall: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val isSkipped = scheduledNode?.status == StopPacingStatus.SKIPPED
     val isOvertime = scheduledNode?.status == StopPacingStatus.OVERTIME_LATE
     val isNearDusk = scheduledNode?.status == StopPacingStatus.NEAR_DUSK
+    var showPhotoTip by remember(place.id) { mutableStateOf(false) }
 
     val checkScale by animateFloatAsState(
         targetValue = if (place.isVisited) 1.15f else 1f,
@@ -1585,9 +1790,21 @@ fun ItineraryPlaceCard(
                             }
                         }
 
-                        if (place.phoneNumber.isNotBlank()) {
-                            IconButton(onClick = onCall, modifier = Modifier.size(34.dp)) {
-                                Icon(Icons.Default.Phone, contentDescription = "Gọi", tint = EmeraldGreenText, modifier = Modifier.size(17.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                            if (onQuickSnap != null) {
+                                IconButton(onClick = onQuickSnap, modifier = Modifier.size(34.dp)) {
+                                    Icon(
+                                        Icons.Default.PhotoCamera,
+                                        contentDescription = "Chụp Watermark",
+                                        tint = SkyTelemetry,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                            if (place.phoneNumber.isNotBlank()) {
+                                IconButton(onClick = onCall, modifier = Modifier.size(34.dp)) {
+                                    Icon(Icons.Default.Phone, contentDescription = "Gọi", tint = EmeraldGreenText, modifier = Modifier.size(17.dp))
+                                }
                             }
                         }
                     }
@@ -1741,6 +1958,56 @@ fun ItineraryPlaceCard(
                         }
                     }
 
+                    // Khung Giờ Vàng & Góc Chụp (chỉ hiển thị gọn trên điểm cảnh đẹp chưa đi)
+                    if (goldenHour != null) {
+                        val isOptimal = goldenHour.match == GoldenHourMatch.OPTIMAL
+                        val ghBg = if (isOptimal) EmeraldGreenSoft else AmberWarningSoft
+                        val ghBorder = if (isOptimal) EmeraldGreenBorder else AmberWarningBorder
+                        val ghText = if (isOptimal) EmeraldGreenText else AmberWarningText
+
+                        Spacer(modifier = Modifier.height(7.dp))
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(ghBg)
+                                .border(BorderStroke(1.dp, ghBorder), RoundedCornerShape(10.dp))
+                                .clickable { showPhotoTip = !showPhotoTip }
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = goldenHour.statusLabel,
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = ghText
+                                )
+                                Icon(
+                                    if (showPhotoTip) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                    contentDescription = "Mẹo góc chụp",
+                                    tint = ghText,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                            if (showPhotoTip) {
+                                Text(
+                                    text = "✨ ${goldenHour.detailHint}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextPrimary
+                                )
+                                Text(
+                                    text = "📸 Góc chụp: ${goldenHour.profile.photoAngleTip}",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                                    color = TextSecondary
+                                )
+                            }
+                        }
+                    }
+
                     if (place.addressHint.isNotBlank()) {
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
@@ -1769,6 +2036,42 @@ fun ItineraryPlaceCard(
                     }
 
                     Spacer(modifier = Modifier.height(10.dp))
+
+                    if (isEditMode) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            listOf(
+                                Triple("⬆️ Lên", SurfaceMuted to TextPrimary, onMoveUp),
+                                Triple("⬇️ Xuống", SurfaceMuted to TextPrimary, onMoveDown),
+                                Triple("Chuyển", SkyTelemetrySoft to SkyTelemetry, onMoveDaySlot),
+                                Triple("Xóa", RoseDestructiveSoft to RoseDestructiveText, onRemoveFromDay)
+                            ).forEach { (label, colorsPair, action) ->
+                                val (bg, fg) = colorsPair
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(9.dp))
+                                        .background(bg)
+                                        .border(BorderStroke(1.dp, BorderSubtle), RoundedCornerShape(9.dp))
+                                        .springClickable { action?.invoke() }
+                                        .padding(vertical = 7.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = label,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = fg
+                                    )
+                                }
+                            }
+                        }
+                    }
 
                     ShadcnButton(
                         onClick = onNavigate,
