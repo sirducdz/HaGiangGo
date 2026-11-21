@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
@@ -26,6 +27,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -97,8 +99,8 @@ fun NearbyScreen(
             .toList()
     }
 
-    val topClearance = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 72.dp
-    val bottomClearance = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 96.dp
+    val topClearance = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 58.dp
+    val bottomClearance = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 92.dp
 
     Box(
         modifier = modifier
@@ -110,94 +112,86 @@ fun NearbyScreen(
                 .fillMaxSize()
                 .padding(top = topClearance)
         ) {
-            // 1. Airbnb-style Soft-Depth Search Pill
+            // 1. Apple Spotlight Search Pill gọn 42dp
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp)
-                    .shadow(
-                        elevation = 6.dp,
-                        shape = RoundedCornerShape(18.dp),
-                        ambientColor = SoftShadowColor,
-                        spotColor = SoftShadowColor
-                    ),
-                shape = RoundedCornerShape(18.dp),
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                    .height(42.dp),
+                shape = RoundedCornerShape(13.dp),
                 color = SurfaceWhite,
-                border = BorderStroke(1.dp, BorderSubtle)
+                border = BorderStroke(0.8.dp, BorderHairline),
+                shadowElevation = 1.dp
             ) {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = {
-                        Text(
-                            "Tìm quán ăn, cây xăng, cứu hộ, homestay...",
-                            color = TextSubtle,
-                            fontSize = 13.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    },
-                    leadingIcon = {
-                        Icon(
-                            Icons.Default.Search,
-                            contentDescription = null,
-                            tint = ElectricOrange,
-                            modifier = Modifier.size(19.dp)
-                        )
-                    },
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            Box(
-                                modifier = Modifier
-                                    .size(28.dp)
-                                    .clip(CircleShape)
-                                    .background(SurfaceMuted)
-                                    .springClickable { searchQuery = "" },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    Icons.Default.Close,
-                                    contentDescription = "Xóa",
-                                    tint = TextSecondary,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                            }
-                        }
-                    },
-                    singleLine = true,
-                    shape = RoundedCornerShape(18.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = SurfaceWhite,
-                        unfocusedContainerColor = SurfaceWhite,
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary,
-                        focusedBorderColor = ElectricOrange,
-                        unfocusedBorderColor = Color.Transparent
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Search,
+                        contentDescription = null,
+                        tint = TextMuted,
+                        modifier = Modifier.size(18.dp)
                     )
-                )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Box(
+                        modifier = Modifier.weight(1f),
+                        contentAlignment = Alignment.CenterStart
+                    ) {
+                        if (searchQuery.isEmpty()) {
+                            Text(
+                                text = "Tìm quán ăn, cây xăng, sửa xe, homestay...",
+                                color = TextSubtle,
+                                fontSize = 13.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        BasicTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                color = TextPrimary,
+                                fontSize = 13.5.sp
+                            ),
+                            cursorBrush = SolidColor(ElectricOrange),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    if (searchQuery.isNotEmpty()) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(CircleShape)
+                                .background(SurfaceMuted)
+                                .springClickable { searchQuery = "" },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Xóa",
+                                tint = TextSecondary,
+                                modifier = Modifier.size(13.dp)
+                            )
+                        }
+                    }
+                }
             }
 
-            // 2. Tactile Filter Pills Row (AllTrails style)
+            // 2. Filter Pills đồng bộ chuẩn iOS
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 val isAllSelected = selectedCategoryFilter == null && !filterRainShelterOnly && !filterBookmarkedOnly
-                NearbyFilterChip(
-                    label = "SOS 2G",
-                    icon = Icons.Default.Sos,
-                    isSelected = true,
-                    activeBg = RoseDestructiveSoft,
-                    activeBorder = RoseDestructiveBorder,
-                    activeContent = RoseDestructiveText,
-                    onClick = { viewModel.openSosSheet() }
-                )
-
                 NearbyFilterChip(
                     label = "Tất cả (${places.size})",
                     icon = Icons.Default.Explore,
@@ -262,7 +256,7 @@ fun NearbyScreen(
                 }
             }
 
-            // 3. Live Reference Telemetry Strip
+            // 3. Thanh trạng thái cự ly + nút SOS 2G gọn bên phải
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -271,7 +265,7 @@ fun NearbyScreen(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(22.dp)
+                        .size(20.dp)
                         .clip(CircleShape)
                         .background(EmeraldGreenSoft),
                     contentAlignment = Alignment.Center
@@ -280,13 +274,13 @@ fun NearbyScreen(
                         if (currentLocation != null) Icons.Default.MyLocation else Icons.Default.PinDrop,
                         contentDescription = null,
                         tint = EmeraldGreenText,
-                        modifier = Modifier.size(13.dp)
+                        modifier = Modifier.size(12.dp)
                     )
                 }
-                Spacer(modifier = Modifier.width(7.dp))
+                Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = if (currentLocation != null) "Cự ly tính từ GPS thực tế của bạn"
-                    else "Cự ly tính từ cụm: ${activeZone?.name ?: "Hà Giang"}",
+                    text = if (currentLocation != null) "Từ GPS của bạn • ${placesWithDistance.size} điểm"
+                    else "Cụm ${activeZone?.name ?: "Hà Giang"} • ${placesWithDistance.size} điểm",
                     style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
                     color = TextSecondary,
                     maxLines = 1,
@@ -294,10 +288,19 @@ fun NearbyScreen(
                     modifier = Modifier.weight(1f)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                ShadcnBadge(
-                    text = "${placesWithDistance.size} ĐIỂM",
-                    variant = ShadcnBadgeVariant.Emerald
-                )
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(RoseDestructiveSoft)
+                        .border(BorderStroke(0.8.dp, RoseDestructiveBorder), CircleShape)
+                        .springClickable { viewModel.openSosSheet() }
+                        .padding(horizontal = 9.dp, vertical = 3.5.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Icon(Icons.Default.Sos, contentDescription = "SOS 2G", tint = RoseDestructiveText, modifier = Modifier.size(12.dp))
+                        Text("SOS 2G", fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = RoseDestructiveText)
+                    }
+                }
             }
 
             // 4. Animated Places List
@@ -441,7 +444,7 @@ private fun NearbyFilterChip(
         label = "FilterChipBg"
     )
     val borderColor by animateColorAsState(
-        targetValue = if (isSelected) activeBorder else BorderSubtle,
+        targetValue = if (isSelected) activeBorder else BorderHairline,
         animationSpec = tween(180),
         label = "FilterChipBorder"
     )
@@ -452,34 +455,28 @@ private fun NearbyFilterChip(
     )
 
     Surface(
-        modifier = Modifier
-            .shadow(
-                elevation = if (isSelected) 3.dp else 1.dp,
-                shape = CircleShape,
-                ambientColor = SoftShadowColor,
-                spotColor = SoftShadowColor
-            )
-            .springClickable(onClick = onClick),
+        modifier = Modifier.springClickable(onClick = onClick),
         shape = CircleShape,
         color = bgColor,
-        border = BorderStroke(1.dp, borderColor)
+        border = BorderStroke(0.8.dp, borderColor),
+        shadowElevation = if (isSelected) 1.dp else 0.dp
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+            modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
                 tint = contentColor,
-                modifier = Modifier.size(14.dp)
+                modifier = Modifier.size(13.5.dp)
             )
             Spacer(modifier = Modifier.width(5.dp))
             Text(
                 text = label,
                 color = contentColor,
                 fontSize = 11.5.sp,
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold
+                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium
             )
         }
     }
@@ -506,6 +503,7 @@ fun NearbyPlaceCard(
         PlaceCategory.HOMESTAY -> Triple(Icons.Default.Hotel, SkyTelemetry, SkyTelemetrySoft)
     }
 
+    var expanded by remember(place.id) { mutableStateOf(false) }
     val bookmarkScale by animateFloatAsState(
         targetValue = if (place.isBookmarked) 1.18f else 1.0f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = 500f),
@@ -516,27 +514,22 @@ fun NearbyPlaceCard(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
         backgroundColor = SurfaceWhite,
-        borderColor = when (place.category) {
-            PlaceCategory.MECHANIC_SOS -> RoseDestructiveBorder
-            PlaceCategory.FUEL -> AmberWarningBorder
-            else -> BorderSubtle
-        }
+        borderColor = BorderHairline,
+        onClick = { expanded = !expanded }
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Soft-tinted Category Tile
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(iconBg),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(21.dp))
-                }
+                AppleIconSquircle(
+                    icon = icon,
+                    tint = iconTint,
+                    backgroundColor = iconBg,
+                    size = 40.dp,
+                    iconSize = 19.dp,
+                    cornerRadius = 11.dp
+                )
 
                 Spacer(modifier = Modifier.width(12.dp))
 
@@ -545,8 +538,9 @@ fun NearbyPlaceCard(
                         Text(
                             text = place.name,
                             style = MaterialTheme.typography.titleSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 15.sp,
+                                letterSpacing = (-0.2).sp
                             ),
                             color = TextPrimary,
                             maxLines = 1,
@@ -554,42 +548,31 @@ fun NearbyPlaceCard(
                             modifier = Modifier.weight(1f, fill = false)
                         )
                         if (place.isShelterInRain) {
-                            Spacer(modifier = Modifier.width(6.dp))
+                            Spacer(modifier = Modifier.width(5.dp))
                             Icon(
                                 Icons.Default.Umbrella,
                                 contentDescription = "Trú mưa tốt",
                                 tint = SkyTelemetry,
-                                modifier = Modifier.size(15.dp)
+                                modifier = Modifier.size(14.dp)
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(2.dp))
 
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        ShadcnBadge(
-                            text = "${String.format(Locale.US, "%.1f", distanceKm)} km",
-                            variant = ShadcnBadgeVariant.Emerald
-                        )
-                        Text(
-                            text = "~${travelMin}p (${if (vehicle == VehicleType.MOTORBIKE) "xe máy" else "ô tô"})",
-                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                            color = TextSecondary
-                        )
-                        Text(
-                            text = "• ${place.altitudeMeters}m",
-                            style = TelemetryTextStyle.copy(fontSize = 11.sp),
-                            color = TextMuted
-                        )
-                    }
+                    val vehicleText = if (vehicle == VehicleType.MOTORBIKE) "xe máy" else "ô tô"
+                    Text(
+                        text = "${String.format(Locale.US, "%.1f", distanceKm)} km • ~${travelMin}p $vehicleText • ${place.altitudeMeters}m",
+                        style = TelemetryTextStyle.copy(fontSize = 11.5.sp, fontWeight = FontWeight.Medium),
+                        color = EmeraldGreenText,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
 
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(34.dp)
                         .clip(CircleShape)
                         .background(if (place.isBookmarked) ElectricOrangeSoft else SurfaceMuted)
                         .springClickable(onClick = onToggleBookmark),
@@ -600,7 +583,7 @@ fun NearbyPlaceCard(
                         contentDescription = "Lưu",
                         tint = if (place.isBookmarked) ElectricOrange else TextMuted,
                         modifier = Modifier
-                            .size(18.dp)
+                            .size(17.dp)
                             .graphicsLayer {
                                 scaleX = bookmarkScale
                                 scaleY = bookmarkScale
@@ -609,35 +592,28 @@ fun NearbyPlaceCard(
                 }
             }
 
-            if (place.addressHint.isNotBlank()) {
+            val summaryText = place.practicalTip.ifBlank { place.addressHint }
+            if (summaryText.isNotBlank()) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "📍 ${place.addressHint}",
+                    text = summaryText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary,
+                    maxLines = if (expanded) 8 else 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            if (expanded && place.addressHint.isNotBlank() && place.addressHint != summaryText) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = place.addressHint,
                     style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
                     color = TextPrimary
                 )
             }
 
-            if (place.practicalTip.isNotBlank()) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(SurfaceMuted)
-                        .padding(horizontal = 10.dp, vertical = 7.dp)
-                ) {
-                    Text(
-                        text = "💡 ${place.practicalTip}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary
-                    )
-                }
-            }
+            Spacer(modifier = Modifier.height(10.dp))
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Action Buttons
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -647,25 +623,25 @@ fun NearbyPlaceCard(
                     variant = ShadcnButtonVariant.Primary,
                     modifier = Modifier
                         .weight(1f)
-                        .height(38.dp),
+                        .height(34.dp),
                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
                 ) {
-                    Icon(Icons.Default.Directions, contentDescription = null, modifier = Modifier.size(15.dp))
+                    Icon(Icons.Default.Directions, contentDescription = null, modifier = Modifier.size(14.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Dẫn đường", fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1)
+                    Text("Chỉ đường", fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1)
                 }
 
                 ShadcnButton(
                     onClick = onOpenGoogleMaps,
                     variant = ShadcnButtonVariant.Secondary,
                     modifier = Modifier
-                        .width(88.dp)
-                        .height(38.dp),
+                        .width(86.dp)
+                        .height(34.dp),
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                 ) {
                     Icon(Icons.Default.Map, contentDescription = "Mở Google Maps", tint = SkyTelemetry, modifier = Modifier.size(14.dp))
                     Spacer(modifier = Modifier.width(3.dp))
-                    Text("G.Maps", fontWeight = FontWeight.SemiBold, fontSize = 11.5.sp, maxLines = 1)
+                    Text("G.Maps", fontWeight = FontWeight.Medium, fontSize = 11.5.sp, maxLines = 1)
                 }
 
                 if (place.phoneNumber.isNotBlank()) {
@@ -673,18 +649,18 @@ fun NearbyPlaceCard(
                         onClick = onCall,
                         variant = ShadcnButtonVariant.Secondary,
                         modifier = Modifier
-                            .weight(0.85f)
-                            .height(38.dp),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
+                            .weight(0.75f)
+                            .height(34.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                     ) {
                         Icon(
                             Icons.Default.Phone,
                             contentDescription = null,
-                            modifier = Modifier.size(15.dp),
+                            modifier = Modifier.size(14.dp),
                             tint = EmeraldGreenText
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Gọi điện", fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1)
+                        Text("Gọi", fontWeight = FontWeight.Medium, fontSize = 12.sp, maxLines = 1)
                     }
                 }
             }

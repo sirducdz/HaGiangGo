@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -159,27 +160,27 @@ fun FloatingPillNavBar(
         modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(horizontal = 20.dp, vertical = 10.dp),
+            .padding(horizontal = 24.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center
     ) {
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(62.dp)
+                .height(56.dp)
                 .shadow(
-                    elevation = 16.dp,
+                    elevation = 12.dp,
                     shape = CircleShape,
-                    ambientColor = SoftShadowColor,
-                    spotColor = SoftShadowColor
+                    ambientColor = SoftAmbientShadow,
+                    spotColor = SoftAmbientShadow
                 ),
             shape = CircleShape,
             color = SurfaceGlass,
-            border = BorderStroke(1.dp, BorderSubtle)
+            border = BorderStroke(0.8.dp, BorderHairline)
         ) {
             BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(5.dp)
+                    .padding(4.dp)
             ) {
                 val tabWidth = maxWidth / items.size
                 val indicatorOffset by animateDpAsState(
@@ -191,29 +192,21 @@ fun FloatingPillNavBar(
                     label = "NavPillSlide"
                 )
 
-                // Viên nang trượt vật lý lò xo phía dưới tab đang chọn
+                // Viên nang trượt nhẹ tinh tế chuẩn iOS 18 Floating Tab Bar
                 Box(
                     modifier = Modifier
                         .offset(x = indicatorOffset)
                         .width(tabWidth)
                         .fillMaxHeight()
                         .clip(CircleShape)
-                        .background(
-                            Brush.horizontalGradient(
-                                listOf(
-                                    ElectricOrangeSoft,
-                                    Color(0xFFFFEDD5)
-                                )
-                            )
-                        )
-                        .border(BorderStroke(1.dp, ElectricOrangeBorder), CircleShape)
+                        .background(ElectricOrangeSoft)
                 )
 
                 Row(modifier = Modifier.fillMaxSize()) {
                     items.forEach { item ->
                         val isSelected = selectedTab == item.index
                         val iconScale by animateFloatAsState(
-                            targetValue = if (isSelected) 1.12f else 1.0f,
+                            targetValue = if (isSelected) 1.08f else 1.0f,
                             animationSpec = spring(dampingRatio = 0.65f, stiffness = 500f),
                             label = "NavIconScale"
                         )
@@ -248,17 +241,17 @@ fun FloatingPillNavBar(
                                     contentDescription = item.label,
                                     tint = contentColor,
                                     modifier = Modifier
-                                        .size(20.dp)
+                                        .size(19.dp)
                                         .graphicsLayer {
                                             scaleX = iconScale
                                             scaleY = iconScale
                                         }
                                 )
-                                Spacer(modifier = Modifier.height(2.dp))
+                                Spacer(modifier = Modifier.height(1.5.dp))
                                 Text(
                                     text = item.label,
-                                    fontSize = 10.5.sp,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    fontSize = 10.sp,
+                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
                                     color = contentColor,
                                     maxLines = 1
                                 )
@@ -314,22 +307,22 @@ fun FlightyFloatingHeader(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Viên nang Trái: Thương hiệu + Live GPS / Chặng hiện tại
+        // Viên nang Trái: Dynamic Island Light gọn 1 dòng
         Surface(
             modifier = Modifier
                 .weight(1f, fill = false)
-                .shadow(10.dp, CircleShape, ambientColor = SoftShadowColor, spotColor = SoftShadowColor)
+                .height(38.dp)
+                .shadow(6.dp, CircleShape, ambientColor = SoftAmbientShadow, spotColor = SoftAmbientShadow)
                 .springClickable(onClick = onStatusClick),
             shape = CircleShape,
             color = SurfaceGlass,
-            border = BorderStroke(1.dp, BorderSubtle)
+            border = BorderStroke(0.8.dp, BorderHairline)
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
+                modifier = Modifier.padding(horizontal = 13.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Đèn hiệu GPS / Live Ride
-                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(16.dp)) {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(14.dp)) {
                     val dotColor = when {
                         isTrackingRide -> EmeraldGreen
                         isOutsideHaGiang -> AmberWarning
@@ -339,11 +332,11 @@ fun FlightyFloatingHeader(
                     if (isTrackingRide || isGpsLive) {
                         Box(
                             modifier = Modifier
-                                .size(14.dp)
+                                .size(12.dp)
                                 .graphicsLayer {
                                     scaleX = pulseScale
                                     scaleY = pulseScale
-                                    alpha = pulseAlpha * 0.45f
+                                    alpha = pulseAlpha * 0.4f
                                 }
                                 .clip(CircleShape)
                                 .background(dotColor)
@@ -351,7 +344,7 @@ fun FlightyFloatingHeader(
                     }
                     Box(
                         modifier = Modifier
-                            .size(8.dp)
+                            .size(7.5.dp)
                             .clip(CircleShape)
                             .background(dotColor)
                     )
@@ -359,79 +352,57 @@ fun FlightyFloatingHeader(
 
                 Spacer(modifier = Modifier.width(8.dp))
 
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "HÀ GIANG GO",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = FontWeight.Black,
-                                letterSpacing = 0.6.sp,
-                                fontSize = 9.5.sp
-                            ),
-                            color = TextMuted
-                        )
-                        if (isTrackingRide) {
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "• ${currentSpeedKmh.roundToInt()} km/h",
-                                style = TelemetryTextStyle.copy(fontSize = 10.sp),
-                                color = EmeraldGreenText
-                            )
-                        }
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = activeZoneName,
-                            style = MaterialTheme.typography.titleSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
-                            ),
-                            color = TextPrimary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = " • ${activeAltitudeMeters}m",
-                            style = TelemetryTextStyle.copy(fontSize = 11.sp),
-                            color = ElectricOrangeHover
-                        )
-                    }
-                }
+                Text(
+                    text = activeZoneName,
+                    style = MaterialTheme.typography.titleSmall.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 13.sp,
+                        letterSpacing = (-0.2).sp
+                    ),
+                    color = TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = if (isTrackingRide) {
+                        " • ${activeAltitudeMeters}m • ${currentSpeedKmh.roundToInt()} km/h"
+                    } else {
+                        " • ${activeAltitudeMeters}m"
+                    },
+                    style = TelemetryTextStyle.copy(fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold),
+                    color = if (isTrackingRide) EmeraldGreenText else TextSecondary,
+                    maxLines = 1
+                )
             }
         }
 
         Spacer(modifier = Modifier.width(10.dp))
 
-        // Viên nang Phải: AI Gợi ý "Làm gì?" nổi bật kiểu Airbnb/Flighty Action Pill
+        // Viên nang Phải: AI Gợi ý "Làm gì?" cùng chiều cao 38dp cân đối
         Surface(
             modifier = Modifier
-                .shadow(10.dp, CircleShape, ambientColor = SoftShadowColor, spotColor = SoftShadowColor)
+                .height(38.dp)
+                .shadow(6.dp, CircleShape, ambientColor = SoftAmbientShadow, spotColor = SoftAmbientShadow)
                 .springClickable(onClick = onWhatNowClick),
             shape = CircleShape,
-            color = Color.Transparent
+            color = ElectricOrange
         ) {
             Row(
-                modifier = Modifier
-                    .background(
-                        Brush.horizontalGradient(
-                            listOf(ElectricOrange, ElectricOrangeHover)
-                        )
-                    )
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                modifier = Modifier.padding(horizontal = 13.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
                     imageVector = Icons.Default.AutoAwesome,
                     contentDescription = "Làm gì bây giờ?",
                     tint = Color.White,
-                    modifier = Modifier.size(16.dp)
+                    modifier = Modifier.size(15.dp)
                 )
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(5.dp))
                 Text(
                     text = "Làm gì?",
                     color = Color.White,
                     style = MaterialTheme.typography.labelMedium.copy(
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.SemiBold,
                         fontSize = 12.sp
                     )
                 )
@@ -449,7 +420,8 @@ fun ElevationProfileCard(
     dayPlaces: List<Place>,
     routeSubtitle: String,
     onPlaceSelected: ((Place) -> Unit)? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    embedded: Boolean = false
 ) {
     val stops = remember(dayPlaces) {
         dayPlaces.distinctBy { it.id }.ifEmpty { emptyList() }
@@ -489,14 +461,27 @@ fun ElevationProfileCard(
         }
     }
 
-    // Animate từng điểm cao độ bằng lò xo khi chuyển Ngày 1 <-> Ngày 2 <-> Ngày 3
-    val animatedSamples = targetAltitudes.mapIndexed { idx, target ->
-        animateFloatAsState(
-            targetValue = target,
-            animationSpec = spring(dampingRatio = 0.78f, stiffness = 260f),
-            label = "ElevSample_$idx"
-        ).value
+    // Dùng 1 Animatable duy nhất nội suy ở pha draw (tránh tạo 25 coroutine animateFloatAsState khi mở/đóng panel)
+    var prevAltitudes by remember { mutableStateOf(targetAltitudes) }
+    val transitionProgress = remember { Animatable(1f) }
+    var hasInitialized by remember { mutableStateOf(false) }
+
+    LaunchedEffect(targetAltitudes) {
+        if (!hasInitialized) {
+            hasInitialized = true
+            prevAltitudes = targetAltitudes
+            transitionProgress.snapTo(1f)
+        } else {
+            transitionProgress.snapTo(0f)
+            transitionProgress.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing)
+            )
+            prevAltitudes = targetAltitudes
+        }
     }
+
+    val dashEffect = remember { PathEffect.dashPathEffect(floatArrayOf(8f, 8f), 0f) }
 
     val maxAlt = remember(stops, targetAltitudes) {
         (stops.maxOfOrNull { it.altitudeMeters } ?: targetAltitudes.maxOrNull()?.toInt() ?: 1500)
@@ -506,75 +491,72 @@ fun ElevationProfileCard(
     }
     val selectedStop = stops.getOrNull(selectedIdx)
 
-    ShadcnCard(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        backgroundColor = SurfaceWhite,
-        borderColor = BorderSubtle
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Terrain,
-                            contentDescription = null,
-                            tint = EmeraldGreenText,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(5.dp))
+    val chartContent: @Composable () -> Unit = {
+        Column(modifier = if (embedded) Modifier else Modifier.padding(16.dp)) {
+            if (!embedded) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Terrain,
+                                contentDescription = null,
+                                tint = EmeraldGreenText,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(5.dp))
+                            Text(
+                                text = "Mặt cắt độ cao đèo • Ngày $dayNumber",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = EmeraldGreenText
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(3.dp))
                         Text(
-                            text = "MẶT CẮT ĐỘ CAO ĐÈO • NGÀY $dayNumber",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            text = routeSubtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    Column(
+                        horizontalAlignment = Alignment.End,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(EmeraldGreenSoft)
+                            .border(BorderStroke(0.8.dp, EmeraldGreenBorder), RoundedCornerShape(12.dp))
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = "ĐỈNH ĐÈO",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                            color = EmeraldGreenText
+                        )
+                        RollingNumberText(
+                            targetValue = maxAlt.toFloat(),
+                            suffix = "m",
+                            style = TelemetryTextStyle.copy(fontSize = 16.sp),
                             color = EmeraldGreenText
                         )
                     }
-                    Spacer(modifier = Modifier.height(3.dp))
-                    Text(
-                        text = routeSubtitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
                 }
 
-                Spacer(modifier = Modifier.width(8.dp))
-
-                Column(
-                    horizontalAlignment = Alignment.End,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(EmeraldGreenSoft)
-                        .border(BorderStroke(1.dp, EmeraldGreenBorder), RoundedCornerShape(12.dp))
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
-                ) {
-                    Text(
-                        text = "ĐỈNH ĐÈO",
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-                        color = EmeraldGreenText
-                    )
-                    RollingNumberText(
-                        targetValue = maxAlt.toFloat(),
-                        suffix = "m",
-                        style = TelemetryTextStyle.copy(fontSize = 16.sp),
-                        color = EmeraldGreenText
-                    )
-                }
+                Spacer(modifier = Modifier.height(12.dp))
             }
-
-            Spacer(modifier = Modifier.height(12.dp))
 
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(112.dp)
+                    .height(if (embedded) 96.dp else 112.dp)
             ) {
-                Canvas(
+                Spacer(
                     modifier = Modifier
                         .fillMaxSize()
                         .pointerInput(stops) {
@@ -587,54 +569,57 @@ fun ElevationProfileCard(
                                 }
                             }
                         }
-                ) {
-                    val w = size.width
-                    val h = size.height
-                    val topPad = 14.dp.toPx()
-                    val bottomPad = 10.dp.toPx()
-                    val chartH = (h - topPad - bottomPad).coerceAtLeast(10f)
-                    val ceilAlt = 1700f
-
-                    val dashEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 8f), 0f)
-                    listOf(500f, 1000f, 1500f).forEach { level ->
-                        val y = topPad + chartH * (1f - (level / ceilAlt))
-                        drawLine(
-                            color = BorderSubtle,
-                            start = Offset(0f, y),
-                            end = Offset(w, y),
-                            strokeWidth = 1.dp.toPx(),
-                            pathEffect = dashEffect
-                        )
-                    }
-
-                    val pts = animatedSamples.mapIndexed { i, alt ->
-                        val x = if (animatedSamples.size > 1) w * i / (animatedSamples.size - 1) else w / 2f
-                        val norm = (alt / ceilAlt).coerceIn(0.06f, 0.96f)
-                        val y = topPad + chartH * (1f - norm)
-                        Offset(x, y)
-                    }
-
-                    if (pts.size >= 2) {
-                        val linePath = Path().apply {
-                            moveTo(pts.first().x, pts.first().y)
-                            for (i in 0 until pts.lastIndex) {
-                                val p0 = pts[i]
-                                val p1 = pts[i + 1]
-                                val cx = (p0.x + p1.x) / 2f
-                                cubicTo(cx, p0.y, cx, p1.y, p1.x, p1.y)
+                        .drawWithCache {
+                            val w = size.width
+                            val h = size.height
+                            val topPad = 14.dp.toPx()
+                            val bottomPad = 10.dp.toPx()
+                            val chartH = (h - topPad - bottomPad).coerceAtLeast(10f)
+                            val ceilAlt = 1700f
+                            val progress = transitionProgress.value
+                            val currentSamples = if (progress >= 0.999f || prevAltitudes.size != targetAltitudes.size) {
+                                targetAltitudes
+                            } else {
+                                List(targetAltitudes.size) { i ->
+                                    prevAltitudes[i] + (targetAltitudes[i] - prevAltitudes[i]) * progress
+                                }
                             }
-                        }
 
-                        val fillPath = Path().apply {
-                            addPath(linePath)
-                            lineTo(pts.last().x, h - bottomPad)
-                            lineTo(pts.first().x, h - bottomPad)
-                            close()
-                        }
+                            val gridYs = floatArrayOf(
+                                topPad + chartH * (1f - (500f / ceilAlt)),
+                                topPad + chartH * (1f - (1000f / ceilAlt)),
+                                topPad + chartH * (1f - (1500f / ceilAlt))
+                            )
 
-                        drawPath(
-                            path = fillPath,
-                            brush = Brush.verticalGradient(
+                            val pts = currentSamples.mapIndexed { i, alt ->
+                                val x = if (currentSamples.size > 1) w * i / (currentSamples.size - 1) else w / 2f
+                                val norm = (alt / ceilAlt).coerceIn(0.06f, 0.96f)
+                                val y = topPad + chartH * (1f - norm)
+                                Offset(x, y)
+                            }
+
+                            val linePath = if (pts.size >= 2) {
+                                Path().apply {
+                                    moveTo(pts.first().x, pts.first().y)
+                                    for (i in 0 until pts.lastIndex) {
+                                        val p0 = pts[i]
+                                        val p1 = pts[i + 1]
+                                        val cx = (p0.x + p1.x) / 2f
+                                        cubicTo(cx, p0.y, cx, p1.y, p1.x, p1.y)
+                                    }
+                                }
+                            } else null
+
+                            val fillPath = if (linePath != null) {
+                                Path().apply {
+                                    addPath(linePath)
+                                    lineTo(pts.last().x, h - bottomPad)
+                                    lineTo(pts.first().x, h - bottomPad)
+                                    close()
+                                }
+                            } else null
+
+                            val fillBrush = Brush.verticalGradient(
                                 colors = listOf(
                                     EmeraldGreen.copy(alpha = 0.26f),
                                     ElectricOrange.copy(alpha = 0.08f),
@@ -643,60 +628,89 @@ fun ElevationProfileCard(
                                 startY = 0f,
                                 endY = h
                             )
-                        )
-
-                        drawPath(
-                            path = linePath,
-                            brush = Brush.horizontalGradient(
+                            val lineBrush = Brush.horizontalGradient(
                                 listOf(EmeraldGreen, ElectricOrange)
-                            ),
-                            style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-                        )
-                    }
+                            )
+                            val strokeStyle = Stroke(
+                                width = 3.dp.toPx(),
+                                cap = StrokeCap.Round,
+                                join = StrokeJoin.Round
+                            )
+                            val gridStrokePx = 1.dp.toPx()
+                            val selLineStrokePx = 1.5.dp.toPx()
+                            val selGlowRadius = 10.dp.toPx()
+                            val selOuterRadius = 5.5.dp.toPx()
+                            val normalOuterRadius = 3.8.dp.toPx()
+                            val selInnerRadius = 4.dp.toPx()
+                            val normalInnerRadius = 2.4.dp.toPx()
 
-                    if (stops.isNotEmpty()) {
-                        stops.forEachIndexed { idx, _ ->
-                            val ratio = if (stops.size > 1) idx.toFloat() / (stops.size - 1) else 0.5f
-                            val x = w * ratio
-                            val samplePos = ratio * (animatedSamples.size - 1)
-                            val sLow = samplePos.toInt().coerceIn(0, animatedSamples.lastIndex)
-                            val sHigh = (sLow + 1).coerceIn(0, animatedSamples.lastIndex)
-                            val sFrac = samplePos - sLow
-                            val interpAlt = animatedSamples[sLow] + (animatedSamples[sHigh] - animatedSamples[sLow]) * sFrac
-                            val norm = (interpAlt / ceilAlt).coerceIn(0.06f, 0.96f)
-                            val y = topPad + chartH * (1f - norm)
-                            val isSel = idx == selectedIdx
-                            val isEndpointOrPeak = idx == 0 || idx == stops.lastIndex || isSel || (stops.size <= 8) || (idx % 2 == 0)
+                            val stopCoords = if (stops.isNotEmpty()) {
+                                List(stops.size) { idx ->
+                                    val ratio = if (stops.size > 1) idx.toFloat() / (stops.size - 1) else 0.5f
+                                    val x = w * ratio
+                                    val samplePos = ratio * (currentSamples.size - 1)
+                                    val sLow = samplePos.toInt().coerceIn(0, currentSamples.lastIndex)
+                                    val sHigh = (sLow + 1).coerceIn(0, currentSamples.lastIndex)
+                                    val sFrac = samplePos - sLow
+                                    val interpAlt = currentSamples[sLow] + (currentSamples[sHigh] - currentSamples[sLow]) * sFrac
+                                    val norm = (interpAlt / ceilAlt).coerceIn(0.06f, 0.96f)
+                                    val y = topPad + chartH * (1f - norm)
+                                    Offset(x, y)
+                                }
+                            } else emptyList()
 
-                            if (isSel) {
-                                drawLine(
-                                    color = ElectricOrange.copy(alpha = 0.45f),
-                                    start = Offset(x, y),
-                                    end = Offset(x, h - bottomPad),
-                                    strokeWidth = 1.5.dp.toPx(),
-                                    pathEffect = dashEffect
-                                )
-                                drawCircle(
-                                    color = ElectricOrange.copy(alpha = 0.22f),
-                                    radius = 10.dp.toPx(),
-                                    center = Offset(x, y)
-                                )
-                            }
-                            if (isEndpointOrPeak) {
-                                drawCircle(
-                                    color = Color.White,
-                                    radius = if (isSel) 5.5.dp.toPx() else 3.8.dp.toPx(),
-                                    center = Offset(x, y)
-                                )
-                                drawCircle(
-                                    color = if (isSel) ElectricOrange else EmeraldGreen,
-                                    radius = if (isSel) 4.dp.toPx() else 2.4.dp.toPx(),
-                                    center = Offset(x, y)
-                                )
+                            onDrawBehind {
+                                for (y in gridYs) {
+                                    drawLine(
+                                        color = BorderSubtle,
+                                        start = Offset(0f, y),
+                                        end = Offset(w, y),
+                                        strokeWidth = gridStrokePx,
+                                        pathEffect = dashEffect
+                                    )
+                                }
+
+                                if (fillPath != null && linePath != null) {
+                                    drawPath(path = fillPath, brush = fillBrush)
+                                    drawPath(path = linePath, brush = lineBrush, style = strokeStyle)
+                                }
+
+                                val curSelected = selectedIdx
+                                for (idx in stopCoords.indices) {
+                                    val pt = stopCoords[idx]
+                                    val isSel = idx == curSelected
+                                    val isEndpointOrPeak = idx == 0 || idx == stopCoords.lastIndex || isSel || (stopCoords.size <= 8) || (idx % 2 == 0)
+
+                                    if (isSel) {
+                                        drawLine(
+                                            color = ElectricOrange.copy(alpha = 0.45f),
+                                            start = pt,
+                                            end = Offset(pt.x, h - bottomPad),
+                                            strokeWidth = selLineStrokePx,
+                                            pathEffect = dashEffect
+                                        )
+                                        drawCircle(
+                                            color = ElectricOrange.copy(alpha = 0.22f),
+                                            radius = selGlowRadius,
+                                            center = pt
+                                        )
+                                    }
+                                    if (isEndpointOrPeak) {
+                                        drawCircle(
+                                            color = Color.White,
+                                            radius = if (isSel) selOuterRadius else normalOuterRadius,
+                                            center = pt
+                                        )
+                                        drawCircle(
+                                            color = if (isSel) ElectricOrange else EmeraldGreen,
+                                            radius = if (isSel) selInnerRadius else normalInnerRadius,
+                                            center = pt
+                                        )
+                                    }
+                                }
                             }
                         }
-                    }
-                }
+                )
             }
 
             Row(
@@ -730,7 +744,7 @@ fun ElevationProfileCard(
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "${selectedStop.altitudeMeters}m • Chạm đỉnh đèo",
+                        text = "${selectedStop.altitudeMeters}m • Chạm biểu đồ",
                         style = MaterialTheme.typography.labelSmall,
                         color = TextMuted
                     )
@@ -742,6 +756,21 @@ fun ElevationProfileCard(
                     )
                 }
             }
+        }
+    }
+
+    if (embedded) {
+        Box(modifier = modifier.fillMaxWidth()) {
+            chartContent()
+        }
+    } else {
+        ShadcnCard(
+            modifier = modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            backgroundColor = SurfaceWhite,
+            borderColor = BorderHairline
+        ) {
+            chartContent()
         }
     }
 }

@@ -38,11 +38,11 @@ import com.reed.hagianggo.ui.theme.*
 @Composable
 fun ShadcnCard(
     modifier: Modifier = Modifier,
-    shape: Shape = RoundedCornerShape(16.dp),
+    shape: Shape = RoundedCornerShape(20.dp),
     backgroundColor: Color = SurfaceWhite,
-    borderColor: Color = BorderSubtle,
-    borderWidth: Dp = 1.dp,
-    shadowElevation: Dp = 2.dp,
+    borderColor: Color = BorderHairline,
+    borderWidth: Dp = 0.8.dp,
+    shadowElevation: Dp = 1.dp,
     onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
@@ -84,25 +84,25 @@ fun ShadcnBadge(
     modifier: Modifier = Modifier,
     variant: ShadcnBadgeVariant = ShadcnBadgeVariant.Default,
     icon: ImageVector? = null,
-    shape: Shape = RoundedCornerShape(8.dp)
+    shape: Shape = RoundedCornerShape(7.dp)
 ) {
     val (bgColor, borderColor, textColor) = when (variant) {
-        ShadcnBadgeVariant.Default -> Triple(SurfaceMuted, BorderSubtle, TextSecondary)
-        ShadcnBadgeVariant.Secondary -> Triple(SurfaceWhite, BorderMedium, TextPrimary)
+        ShadcnBadgeVariant.Default -> Triple(SurfaceMuted, BorderHairline, TextSecondary)
+        ShadcnBadgeVariant.Secondary -> Triple(SurfaceWhite, BorderHairline, TextPrimary)
         ShadcnBadgeVariant.Outline -> Triple(Color.Transparent, BorderMedium, TextSecondary)
-        ShadcnBadgeVariant.Orange -> Triple(ElectricOrangeSoft, ElectricOrangeBorder, ElectricOrangeHover)
-        ShadcnBadgeVariant.Emerald -> Triple(EmeraldGreenSoft, EmeraldGreenBorder, EmeraldGreenText)
-        ShadcnBadgeVariant.Amber -> Triple(AmberWarningSoft, AmberWarningBorder, AmberWarningText)
-        ShadcnBadgeVariant.Rose -> Triple(RoseDestructiveSoft, RoseDestructiveBorder, RoseDestructiveText)
-        ShadcnBadgeVariant.Sky -> Triple(SkyTelemetrySoft, SkyTelemetryBorder, SkyTelemetry)
+        ShadcnBadgeVariant.Orange -> Triple(ElectricOrangeSoft, ElectricOrangeBorder.copy(alpha = 0.45f), ElectricOrangeHover)
+        ShadcnBadgeVariant.Emerald -> Triple(EmeraldGreenSoft, EmeraldGreenBorder.copy(alpha = 0.45f), EmeraldGreenText)
+        ShadcnBadgeVariant.Amber -> Triple(AmberWarningSoft, AmberWarningBorder.copy(alpha = 0.45f), AmberWarningText)
+        ShadcnBadgeVariant.Rose -> Triple(RoseDestructiveSoft, RoseDestructiveBorder.copy(alpha = 0.45f), RoseDestructiveText)
+        ShadcnBadgeVariant.Sky -> Triple(SkyTelemetrySoft, SkyTelemetryBorder.copy(alpha = 0.45f), SkyTelemetry)
     }
 
     Box(
         modifier = modifier
             .clip(shape)
             .background(bgColor)
-            .border(BorderStroke(1.dp, borderColor), shape)
-            .padding(horizontal = 8.dp, vertical = 3.5.dp),
+            .border(BorderStroke(0.8.dp, borderColor), shape)
+            .padding(horizontal = 7.dp, vertical = 2.5.dp),
         contentAlignment = Alignment.Center
     ) {
         Row(
@@ -122,9 +122,9 @@ fun ShadcnBadge(
             Text(
                 text = text,
                 color = textColor,
-                fontSize = 11.sp,
+                fontSize = 10.5.sp,
                 fontWeight = FontWeight.SemiBold,
-                letterSpacing = 0.2.sp,
+                letterSpacing = 0.1.sp,
                 maxLines = 1
             )
         }
@@ -216,11 +216,10 @@ fun <T> ShadcnSegmentedTabs(
 
     BoxWithConstraints(
         modifier = modifier
-            .height(40.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .height(36.dp)
+            .clip(RoundedCornerShape(11.dp))
             .background(SurfaceMuted)
-            .border(BorderStroke(1.dp, BorderSubtle), RoundedCornerShape(12.dp))
-            .padding(3.dp)
+            .padding(2.5.dp)
     ) {
         val tabCount = items.size.coerceAtLeast(1)
         val tabWidth = maxWidth / tabCount
@@ -233,16 +232,15 @@ fun <T> ShadcnSegmentedTabs(
             label = "SegmentedSlideOffset"
         )
 
-        // Viên nang trắng có bóng đổ nhẹ trượt mượt giữa các tab
+        // Viên nang trắng có bóng đổ siêu nhẹ chuẩn UISegmentedControl iOS
         Box(
             modifier = Modifier
                 .offset(x = indicatorOffset)
                 .width(tabWidth)
                 .fillMaxHeight()
-                .shadow(2.dp, RoundedCornerShape(9.dp), ambientColor = SoftShadowColor, spotColor = SoftShadowColor)
-                .clip(RoundedCornerShape(9.dp))
+                .shadow(1.5.dp, RoundedCornerShape(8.5.dp), ambientColor = SoftAmbientShadow, spotColor = SoftAmbientShadow)
+                .clip(RoundedCornerShape(8.5.dp))
                 .background(SurfaceWhite)
-                .border(BorderStroke(1.dp, BorderSubtle), RoundedCornerShape(9.dp))
         )
 
         Row(modifier = Modifier.fillMaxSize()) {
@@ -252,7 +250,7 @@ fun <T> ShadcnSegmentedTabs(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .clip(RoundedCornerShape(9.dp))
+                        .clip(RoundedCornerShape(8.5.dp))
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
@@ -398,6 +396,69 @@ fun ShadcnMetricCard(
                     )
                 }
             }
+        }
+    }
+}
+
+// =========================================================================
+// 7. Apple HIG Shared Helpers: AppleIconSquircle & AppleSectionHeader
+// =========================================================================
+@Composable
+fun AppleIconSquircle(
+    icon: ImageVector,
+    tint: Color,
+    backgroundColor: Color,
+    modifier: Modifier = Modifier,
+    size: Dp = 32.dp,
+    iconSize: Dp = 17.dp,
+    cornerRadius: Dp = 9.dp
+) {
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(RoundedCornerShape(cornerRadius))
+            .background(backgroundColor),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(iconSize)
+        )
+    }
+}
+
+@Composable
+fun AppleSectionHeader(
+    title: String,
+    trailingText: String? = null,
+    onTrailingClick: (() -> Unit)? = null,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp, vertical = 2.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall.copy(
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 14.sp,
+                letterSpacing = (-0.2).sp
+            ),
+            color = TextPrimary
+        )
+        if (!trailingText.isNullOrBlank()) {
+            Text(
+                text = trailingText,
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
+                color = if (onTrailingClick != null) ElectricOrangeHover else TextMuted,
+                modifier = if (onTrailingClick != null) Modifier.clickable(onClick = onTrailingClick) else Modifier
+            )
         }
     }
 }

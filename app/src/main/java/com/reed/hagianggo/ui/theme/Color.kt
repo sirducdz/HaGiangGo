@@ -10,13 +10,15 @@ import androidx.compose.ui.graphics.Color
 // Bề mặt & Nền (AllTrails × Airbnb Clean Light)
 val AppBackground = Color(0xFFF6F8FA)     // Nền sáng kem lạnh dịu mắt, làm nổi bật thẻ trắng Pure White
 val SurfaceWhite = Color(0xFFFFFFFF)      // Pure White: Bề mặt Card, Sheet, Floating Pill
-val SurfaceGlass = Color(0xEBFFFFFF)      // Kính mờ sáng 92% cho Thanh điều hướng & Header nổi
+val SurfaceGlass = Color(0xF5FFFFFF)      // Kính mờ sáng 96% chuẩn iOS cho Thanh điều hướng & Header nổi
 val SurfaceMuted = Color(0xFFF1F5F9)      // Slate-100: Khay trượt Tab, Ô tìm kiếm, Box phụ
 val SurfaceHover = Color(0xFFE2E8F0)      // Slate-200: Trạng thái nhấn, hover
 val SoftShadowColor = Color(0x180F172A)   // Bóng đổ mềm tự nhiên kiểu Airbnb
+val SoftAmbientShadow = Color(0x100F172A) // Bóng đổ khuếch tán nhẹ kiểu Apple Card
 
 // Đường viền 1px sắc nét (Hairline Borders)
 val BorderSubtle = Color(0xFFE2E8F0)      // Slate-200: Viền Card, Divider, BottomBar
+val BorderHairline = Color(0xFFE5E7EB)    // Viền mảnh 0.8dp dịu mắt chuẩn iOS Inset Group
 val BorderMedium = Color(0xFFCBD5E1)      // Slate-300: Viền input, nút bấm phụ
 val BorderFocus  = Color(0xFFF97316)      // Electric Orange: Viền khi focus
 

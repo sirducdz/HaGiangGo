@@ -17,8 +17,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
@@ -80,6 +82,7 @@ fun TripScreen(
     var selectedZoneId by remember { mutableStateOf<String?>(null) }
     var focusedPlace by remember { mutableStateOf<Place?>(null) }
     var showBudgetDialog by remember { mutableStateOf(false) }
+    var showTripSettingsSheet by remember { mutableStateOf(false) }
     var showRealMap by remember { mutableStateOf(true) }
     var sheetDetent by remember { mutableStateOf(MapSheetDetent.HALF) }
     var dragOffsetPx by remember { mutableFloatStateOf(0f) }
@@ -279,7 +282,7 @@ fun TripScreen(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // Hàng công cụ: Chuyển chế độ Bản đồ + Nấc Sheet + Nút Thêm điểm
+                    // Hàng công cụ: Chuyển chế độ Bản đồ + Nấc Sheet + Cài đặt + Nút Thêm điểm
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -289,13 +292,13 @@ fun TripScreen(
                             items = listOf(true, false),
                             selectedItem = showRealMap,
                             onItemSelected = { showRealMap = it },
-                            modifier = Modifier.width(214.dp)
+                            modifier = Modifier.width(176.dp)
                         ) { isReal, isSelected ->
                             Text(
-                                text = if (isReal) "🗺️ Bản đồ Thật" else "🔄 8 Chặng",
+                                text = if (isReal) "Bản đồ" else "8 Chặng",
                                 color = if (isSelected) TextPrimary else TextMuted,
-                                fontSize = 11.5.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                fontSize = 12.sp,
+                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium
                             )
                         }
 
@@ -305,51 +308,74 @@ fun TripScreen(
                         ) {
                             // Nút chuyển nhanh nấc mở tấm trượt
                             Surface(
-                                modifier = Modifier.springClickable {
-                                    sheetDetent = when (sheetDetent) {
-                                        MapSheetDetent.PEEK -> MapSheetDetent.HALF
-                                        MapSheetDetent.HALF -> MapSheetDetent.EXPANDED
-                                        MapSheetDetent.EXPANDED -> MapSheetDetent.PEEK
-                                    }
-                                },
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .springClickable {
+                                        sheetDetent = when (sheetDetent) {
+                                            MapSheetDetent.PEEK -> MapSheetDetent.HALF
+                                            MapSheetDetent.HALF -> MapSheetDetent.EXPANDED
+                                            MapSheetDetent.EXPANDED -> MapSheetDetent.PEEK
+                                        }
+                                    },
                                 shape = RoundedCornerShape(10.dp),
                                 color = SurfaceMuted,
-                                border = BorderStroke(1.dp, BorderSubtle)
+                                border = BorderStroke(0.8.dp, BorderHairline)
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 7.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
+                                Box(contentAlignment = Alignment.Center) {
                                     Icon(
                                         imageVector = when (sheetDetent) {
                                             MapSheetDetent.PEEK -> Icons.Default.KeyboardArrowUp
                                             MapSheetDetent.HALF -> Icons.Default.UnfoldMore
                                             MapSheetDetent.EXPANDED -> Icons.Default.KeyboardArrowDown
                                         },
-                                        contentDescription = null,
+                                        contentDescription = sheetDetent.label,
                                         tint = TextSecondary,
-                                        modifier = Modifier.size(15.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(3.dp))
-                                    Text(
-                                        text = sheetDetent.label,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = TextPrimary
+                                        modifier = Modifier.size(18.dp)
                                     )
                                 }
                             }
 
-                            // Nút Thêm địa điểm mới nổi bật
+                            // Nút Cài đặt chuyến đi & Bản đồ (kèm chấm xanh khi đã sẵn sàng Offline)
                             Surface(
-                                modifier = Modifier.springClickable {
-                                    viewModel.openAddPlaceDialog(selectedZoneId)
-                                },
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .springClickable { showTripSettingsSheet = true },
+                                shape = RoundedCornerShape(10.dp),
+                                color = SurfaceMuted,
+                                border = BorderStroke(0.8.dp, BorderHairline)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.Tune,
+                                        contentDescription = "Cài đặt chuyến đi",
+                                        tint = TextPrimary,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    if (offlineMapStatus.isReadyOffline) {
+                                        Box(
+                                            modifier = Modifier
+                                                .align(Alignment.TopEnd)
+                                                .padding(4.dp)
+                                                .size(6.dp)
+                                                .clip(CircleShape)
+                                                .background(EmeraldGreen)
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Nút Thêm địa điểm mới
+                            Surface(
+                                modifier = Modifier
+                                    .height(34.dp)
+                                    .springClickable {
+                                        viewModel.openAddPlaceDialog(selectedZoneId)
+                                    },
                                 shape = RoundedCornerShape(10.dp),
                                 color = ElectricOrange
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                                    modifier = Modifier.padding(horizontal = 10.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Icon(
@@ -361,8 +387,8 @@ fun TripScreen(
                                     Spacer(modifier = Modifier.width(2.dp))
                                     Text(
                                         text = "Thêm",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.SemiBold,
                                         color = Color.White
                                     )
                                 }
@@ -403,7 +429,7 @@ fun TripScreen(
 
                 HorizontalDivider(color = BorderSubtle.copy(alpha = 0.7f))
 
-                // Danh sách Bento Cấu hình + Các Thẻ Địa Điểm (Cuộn mượt bên dưới)
+                // Danh sách Địa điểm ngay tầm mắt (Cấu hình gọn trong nút Cài đặt)
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
@@ -414,256 +440,63 @@ fun TripScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    // Khối Bento Tóm tắt Chuyến đi + Live Ride + Ngân sách Rolling Odometer
-                    item(key = "bento_trip_strip") {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            // Bento 1: Lộ trình & Xe
+                    // Chỉ nhắc gọn khi chưa tải gói Bản đồ Offline
+                    if (!offlineMapStatus.isReadyOffline) {
+                        item(key = "offline_pack_strip") {
                             ShadcnCard(
-                                modifier = Modifier.weight(1.15f),
+                                modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(14.dp),
-                                backgroundColor = SurfaceMuted,
-                                borderColor = BorderSubtle,
-                                shadowElevation = 0.dp
-                            ) {
-                                Column(modifier = Modifier.padding(10.dp)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text("PHƯƠNG TIỆN", style = MaterialTheme.typography.labelSmall, color = TextMuted)
-                                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            listOf(3 to "3N2Đ", 4 to "4N3Đ").forEach { (days, label) ->
-                                                val sel = config.durationDays == days
-                                                Box(
-                                                    modifier = Modifier
-                                                        .clip(RoundedCornerShape(6.dp))
-                                                        .background(if (sel) ElectricOrange else SurfaceWhite)
-                                                        .springClickable {
-                                                            viewModel.updateTripConfig(config.withDurationDays(days))
-                                                        }
-                                                        .padding(horizontal = 6.dp, vertical = 2.5.dp)
-                                                ) {
-                                                    Text(
-                                                        text = label,
-                                                        fontSize = 10.sp,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = if (sel) Color.White else TextSecondary
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.height(6.dp))
-                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        listOf(
-                                            VehicleType.MOTORBIKE to "🏍️ Xe máy",
-                                            VehicleType.CAR to "🚗 Ô tô"
-                                        ).forEach { (vType, vLabel) ->
-                                            val isVeh = config.vehicle == vType
-                                            Box(
-                                                modifier = Modifier
-                                                    .weight(1f)
-                                                    .clip(RoundedCornerShape(8.dp))
-                                                    .background(if (isVeh) SurfaceWhite else Color.Transparent)
-                                                    .border(
-                                                        BorderStroke(1.dp, if (isVeh) ElectricOrangeBorder else BorderSubtle),
-                                                        RoundedCornerShape(8.dp)
-                                                    )
-                                                    .springClickable {
-                                                        viewModel.updateTripConfig(config.copy(vehicle = vType))
-                                                    }
-                                                    .padding(vertical = 5.dp),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Text(
-                                                    text = vLabel,
-                                                    fontSize = 10.5.sp,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    color = if (isVeh) TextPrimary else TextSecondary
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            // Bento 2: Ngân sách Rolling Odometer + Live HUD
-                            Column(
-                                modifier = Modifier.weight(0.85f),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                ShadcnCard(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(12.dp),
-                                    backgroundColor = SurfaceMuted,
-                                    borderColor = BorderSubtle,
-                                    shadowElevation = 0.dp,
-                                    onClick = { showBudgetDialog = true }
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Column {
-                                            Text("ĐÃ CHI", style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp), color = TextMuted)
-                                            RollingNumberText(
-                                                targetValue = totalSpent.toFloat(),
-                                                suffix = " đ",
-                                                useThousandSeparator = true,
-                                                style = TelemetryTextStyle.copy(fontSize = 13.sp),
-                                                color = TextPrimary
-                                            )
-                                        }
-                                        Icon(Icons.Default.Edit, contentDescription = null, tint = ElectricOrange, modifier = Modifier.size(13.dp))
-                                    }
-                                }
-
-                                ShadcnButton(
-                                    onClick = {
-                                        if (!liveRideState.isTracking) viewModel.startRide()
-                                        viewModel.openCockpit()
-                                    },
-                                    variant = if (liveRideState.isTracking) ShadcnButtonVariant.Secondary else ShadcnButtonVariant.Primary,
-                                    modifier = Modifier.fillMaxWidth().height(34.dp),
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                                ) {
-                                    Icon(
-                                        if (liveRideState.isTracking) Icons.Default.Speed else Icons.Default.PlayArrow,
-                                        contentDescription = null,
-                                        tint = if (liveRideState.isTracking) EmeraldGreenText else Color.White,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = if (liveRideState.isTracking) "Mở HUD Live" else "Bật HUD Đèo",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (liveRideState.isTracking) EmeraldGreenText else Color.White
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    // Dải trạng thái Bản đồ Offline & Cứu hộ nhanh
-                    item(key = "offline_pack_strip") {
-                        ShadcnCard(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(14.dp),
-                            backgroundColor = if (offlineMapStatus.isReadyOffline) EmeraldGreenSoft.copy(alpha = 0.55f) else ElectricOrangeSoft.copy(alpha = 0.65f),
-                            borderColor = if (offlineMapStatus.isReadyOffline) EmeraldGreenBorder else ElectricOrangeBorder,
-                            shadowElevation = 0.dp,
-                            onClick = { viewModel.openOfflineMapDialog() }
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 9.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                                    Icon(
-                                        if (offlineMapStatus.isReadyOffline) Icons.Default.OfflinePin else Icons.Default.CloudDownload,
-                                        contentDescription = null,
-                                        tint = if (offlineMapStatus.isReadyOffline) EmeraldGreenText else ElectricOrangeHover,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Column {
-                                        Text(
-                                            text = if (offlineMapStatus.isReadyOffline) "Bản đồ Offline đã sẵn sàng (${String.format(Locale.US, "%.1f", offlineMapStatus.storageSizeMb)} MB)"
-                                            else if (offlineMapStatus.isDownloading) "Đang lưu bản đồ Offline (${offlineMapStatus.downloadedTiles}/${offlineMapStatus.totalTiles})..."
-                                            else "Lưu gói Bản đồ Địa hình Offline Hà Giang vào filesDir",
-                                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                            color = TextPrimary
-                                        )
-                                        Text(
-                                            text = "Lưu trong filesDir • Vẫn xem rõ đường đèo khi rớt 4G",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = TextSecondary
-                                        )
-                                    }
-                                }
-                                ShadcnBadge(
-                                    text = if (offlineMapStatus.isReadyOffline) "OFFLINE ✓" else "TẢI NGAY",
-                                    variant = if (offlineMapStatus.isReadyOffline) ShadcnBadgeVariant.Emerald else ShadcnBadgeVariant.Orange
-                                )
-                            }
-                        }
-                    }
-
-                    // Tùy chọn mặc định khi bấm Dẫn đường: Trong app / Hỏi mỗi lần / Google Maps
-                    item(key = "nav_preference_strip") {
-                        ShadcnCard(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(14.dp),
-                            backgroundColor = SurfaceWhite,
-                            borderColor = BorderSubtle,
-                            shadowElevation = 0.dp
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(10.dp),
-                                verticalArrangement = Arrangement.spacedBy(7.dp)
+                                backgroundColor = ElectricOrangeSoft,
+                                borderColor = ElectricOrangeBorder.copy(alpha = 0.6f),
+                                shadowElevation = 0.dp,
+                                onClick = { viewModel.openOfflineMapDialog() }
                             ) {
                                 Row(
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 9.dp),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(
-                                        text = "BẢN ĐỒ DẪN ĐƯỜNG MẶC ĐỊNH",
-                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                        color = TextMuted
-                                    )
-                                    Text(
-                                        text = navMapPreference.shortLabel,
-                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                        color = ElectricOrangeHover
-                                    )
-                                }
-                                ShadcnSegmentedTabs(
-                                    items = NavigationMapPreference.entries,
-                                    selectedItem = navMapPreference,
-                                    onItemSelected = { viewModel.setNavMapPreference(it) },
-                                    modifier = Modifier.fillMaxWidth()
-                                ) { pref, isSelected ->
-                                    Text(
-                                        text = pref.shortLabel,
-                                        color = if (isSelected) TextPrimary else TextMuted,
-                                        fontSize = 11.5.sp,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                        maxLines = 1
-                                    )
+                                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                        Icon(
+                                            Icons.Default.CloudDownload,
+                                            contentDescription = null,
+                                            tint = ElectricOrangeHover,
+                                            modifier = Modifier.size(17.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = if (offlineMapStatus.isDownloading) {
+                                                "Đang tải bản đồ Offline (${offlineMapStatus.downloadedTiles}/${offlineMapStatus.totalTiles})..."
+                                            } else {
+                                                "Lưu gói Bản đồ Offline để xem khi mất sóng"
+                                            },
+                                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                                            color = TextPrimary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    ShadcnBadge(text = "Tải ngay", variant = ShadcnBadgeVariant.Orange)
                                 }
                             }
                         }
                     }
 
-                    // Tiêu đề danh sách
+                    // Tiêu đề danh sách kiểu Apple Section Header
                     item(key = "list_header") {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = if (selectedZone == null) "KHÁM PHÁ TOÀN VÒNG LẶP (${displayedPlaces.size} ĐIỂM)"
-                                else "${selectedZone.name.uppercase()} (${displayedPlaces.size} ĐIỂM)",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = TextMuted
-                            )
-                            Text(
-                                text = "Chạm thẻ để bay tới ghim",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = ElectricOrangeHover
-                            )
+                        val durDisplay = when (config.duration) {
+                            TripDuration.DAYS_2_NIGHTS_1 -> "2N1Đ"
+                            TripDuration.DAYS_3_NIGHTS_2 -> "3N2Đ"
+                            TripDuration.DAYS_4_NIGHTS_3 -> "4N3Đ"
                         }
+                        AppleSectionHeader(
+                            title = if (selectedZone == null) "Toàn vòng lặp • ${displayedPlaces.size} điểm"
+                            else "${selectedZone.name} • ${displayedPlaces.size} điểm",
+                            trailingText = "$durDisplay • ${config.vehicle.title} ⚙",
+                            onTrailingClick = { showTripSettingsSheet = true }
+                        )
                     }
 
                     if (displayedPlaces.isEmpty()) {
@@ -835,6 +668,247 @@ fun TripScreen(
             }
         )
     }
+
+    if (showTripSettingsSheet) {
+        TripSettingsBottomSheet(
+            config = config,
+            totalSpent = totalSpent,
+            isTrackingRide = liveRideState.isTracking,
+            offlineMapStatus = offlineMapStatus,
+            navMapPreference = navMapPreference,
+            onUpdateDuration = { days -> viewModel.updateTripConfig(config.withDurationDays(days)) },
+            onUpdateVehicle = { vehicle -> viewModel.updateTripConfig(config.copy(vehicle = vehicle)) },
+            onSelectNavPref = { pref -> viewModel.setNavMapPreference(pref) },
+            onOpenBudget = {
+                showTripSettingsSheet = false
+                showBudgetDialog = true
+            },
+            onOpenHud = {
+                showTripSettingsSheet = false
+                if (!liveRideState.isTracking) viewModel.startRide()
+                viewModel.openCockpit()
+            },
+            onOpenOfflinePack = {
+                showTripSettingsSheet = false
+                viewModel.openOfflineMapDialog()
+            },
+            onOpenRecap = {
+                showTripSettingsSheet = false
+                viewModel.openRecapSheet()
+            },
+            onDismiss = { showTripSettingsSheet = false }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TripSettingsBottomSheet(
+    config: TripConfig,
+    totalSpent: Long,
+    isTrackingRide: Boolean,
+    offlineMapStatus: OfflineMapStatus,
+    navMapPreference: NavigationMapPreference,
+    onUpdateDuration: (Int) -> Unit,
+    onUpdateVehicle: (VehicleType) -> Unit,
+    onSelectNavPref: (NavigationMapPreference) -> Unit,
+    onOpenBudget: () -> Unit,
+    onOpenHud: () -> Unit,
+    onOpenOfflinePack: () -> Unit,
+    onOpenRecap: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val currencyFormatter = remember { java.text.NumberFormat.getNumberInstance(Locale.forLanguageTag("vi-VN")) }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = AppBackground,
+        dragHandle = { BottomSheetDefaults.DragHandle(color = BorderMedium) }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .navigationBarsPadding()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "Cài đặt Chuyến đi & Bản đồ",
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                color = TextPrimary
+            )
+
+            // Nhóm 1: Lộ trình & Phương tiện
+            ShadcnCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                backgroundColor = SurfaceWhite,
+                borderColor = BorderHairline
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Thời lượng chuyến đi", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold), color = TextPrimary)
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            listOf(3 to "3N2Đ", 4 to "4N3Đ").forEach { (days, label) ->
+                                val sel = config.durationDays == days
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (sel) ElectricOrange else SurfaceMuted)
+                                        .springClickable { onUpdateDuration(days) }
+                                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                                ) {
+                                    Text(label, fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, color = if (sel) Color.White else TextSecondary)
+                                }
+                            }
+                        }
+                    }
+
+                    HorizontalDivider(color = BorderHairline)
+
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("Phương tiện di chuyển", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold), color = TextPrimary)
+                        ShadcnSegmentedTabs(
+                            items = VehicleType.entries,
+                            selectedItem = config.vehicle,
+                            onItemSelected = onUpdateVehicle,
+                            modifier = Modifier.fillMaxWidth()
+                        ) { vType, isSel ->
+                            Text(
+                                text = vType.title,
+                                color = if (isSel) TextPrimary else TextMuted,
+                                fontSize = 12.sp,
+                                fontWeight = if (isSel) FontWeight.SemiBold else FontWeight.Medium
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(color = BorderHairline)
+
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("Bản đồ dẫn đường mặc định", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold), color = TextPrimary)
+                        ShadcnSegmentedTabs(
+                            items = NavigationMapPreference.entries,
+                            selectedItem = navMapPreference,
+                            onItemSelected = onSelectNavPref,
+                            modifier = Modifier.fillMaxWidth()
+                        ) { pref, isSel ->
+                            Text(
+                                text = pref.shortLabel,
+                                color = if (isSel) TextPrimary else TextMuted,
+                                fontSize = 11.5.sp,
+                                fontWeight = if (isSel) FontWeight.SemiBold else FontWeight.Medium,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Nhóm 2: iOS Inset Grouped Rows cho Công cụ & Dữ liệu Offline
+            ShadcnCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                backgroundColor = SurfaceWhite,
+                borderColor = BorderHairline
+            ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    TripSettingsActionRow(
+                        icon = Icons.Default.OfflinePin,
+                        iconTint = if (offlineMapStatus.isReadyOffline) EmeraldGreenText else ElectricOrangeHover,
+                        iconBg = if (offlineMapStatus.isReadyOffline) EmeraldGreenSoft else ElectricOrangeSoft,
+                        title = "Gói Bản đồ Địa hình Offline",
+                        subtitle = if (offlineMapStatus.isReadyOffline) {
+                            "Đã sẵn sàng (${String.format(Locale.US, "%.1f", offlineMapStatus.storageSizeMb)} MB trong filesDir)"
+                        } else {
+                            "Chưa tải gói đường đèo Offline"
+                        },
+                        onClick = onOpenOfflinePack
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(start = 54.dp), color = BorderHairline)
+                    TripSettingsActionRow(
+                        icon = Icons.Default.TwoWheeler,
+                        iconTint = EmeraldGreenText,
+                        iconBg = EmeraldGreenSoft,
+                        title = if (isTrackingRide) "Mở HUD Chế độ Phượt (Đang chạy)" else "Bật Chế độ Phượt (HUD)",
+                        subtitle = "Đo tốc độ, cao độ thực & tự động check-in",
+                        onClick = onOpenHud
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(start = 54.dp), color = BorderHairline)
+                    TripSettingsActionRow(
+                        icon = Icons.Default.AccountBalanceWallet,
+                        iconTint = SkyTelemetry,
+                        iconBg = SkyTelemetrySoft,
+                        title = "Ngân sách dự kiến chuyến đi",
+                        subtitle = "Định mức ${currencyFormatter.format(config.totalBudget)} đ • Đã chi ${currencyFormatter.format(totalSpent)} đ",
+                        onClick = onOpenBudget
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(start = 54.dp), color = BorderHairline)
+                    TripSettingsActionRow(
+                        icon = Icons.Default.AutoAwesomeMotion,
+                        iconTint = AmberWarningText,
+                        iconBg = AmberWarningSoft,
+                        title = "Poster Tổng kết Hành trình",
+                        subtitle = "Xuất ảnh PNG vệt đường & cột mốc đã đi",
+                        onClick = onOpenRecap
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TripSettingsActionRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    iconTint: Color,
+    iconBg: Color,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AppleIconSquircle(
+            icon = icon,
+            tint = iconTint,
+            backgroundColor = iconBg,
+            size = 32.dp,
+            iconSize = 17.dp
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = TextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = TextMuted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = TextSubtle, modifier = Modifier.size(18.dp))
+    }
 }
 
 @Composable
@@ -844,7 +918,7 @@ private fun ZoneFilterPill(
     onClick: () -> Unit
 ) {
     val bgColor by animateColorAsState(
-        targetValue = if (isSelected) ElectricOrange else SurfaceMuted,
+        targetValue = if (isSelected) ElectricOrange else SurfaceWhite,
         animationSpec = tween(180),
         label = "ZonePillBg"
     )
@@ -859,17 +933,17 @@ private fun ZoneFilterPill(
             .clip(CircleShape)
             .background(bgColor)
             .border(
-                BorderStroke(1.dp, if (isSelected) ElectricOrangeHover else BorderSubtle),
+                BorderStroke(0.8.dp, if (isSelected) ElectricOrange else BorderHairline),
                 CircleShape
             )
             .springClickable(onClick = onClick)
-            .padding(horizontal = 13.dp, vertical = 6.5.dp)
+            .padding(horizontal = 12.dp, vertical = 6.dp)
     ) {
         Text(
             text = label,
             color = textColor,
             fontSize = 11.5.sp,
-            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
             maxLines = 1
         )
     }
@@ -908,45 +982,45 @@ fun PlaceRowCard(
     ShadcnCard(
         modifier = modifier,
         shape = RoundedCornerShape(18.dp),
-        backgroundColor = if (place.isVisited) SurfaceMuted.copy(alpha = 0.65f) else SurfaceWhite,
+        backgroundColor = if (place.isVisited) SurfaceMuted.copy(alpha = 0.6f) else SurfaceWhite,
         borderColor = when {
             isFocused -> ElectricOrange
             place.isVisited -> EmeraldGreenBorder
-            else -> BorderSubtle
+            else -> BorderHairline
         },
-        borderWidth = if (isFocused) 1.5.dp else 1.dp,
+        borderWidth = if (isFocused) 1.4.dp else 0.8.dp,
         onClick = onCardClick
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
+        Column(modifier = Modifier.padding(13.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(RoundedCornerShape(13.dp))
-                        .background(softBg)
-                        .border(BorderStroke(1.dp, iconTint.copy(alpha = 0.22f)), RoundedCornerShape(13.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(21.dp))
-                }
+                AppleIconSquircle(
+                    icon = icon,
+                    tint = iconTint,
+                    backgroundColor = softBg,
+                    size = 40.dp,
+                    iconSize = 19.dp,
+                    cornerRadius = 11.dp
+                )
 
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(11.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = place.name,
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleSmall.copy(
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 15.sp,
+                                letterSpacing = (-0.2).sp,
                                 textDecoration = if (place.isVisited) androidx.compose.ui.text.style.TextDecoration.LineThrough else null
                             ),
                             color = if (place.isVisited) TextMuted else TextPrimary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f, fill = false)
                         )
                         if (place.isShelterInRain) {
                             Spacer(modifier = Modifier.width(4.dp))
@@ -954,46 +1028,41 @@ fun PlaceRowCard(
                                 Icons.Default.Umbrella,
                                 contentDescription = "Trú mưa tốt",
                                 tint = SkyTelemetry,
-                                modifier = Modifier.size(15.dp)
+                                modifier = Modifier.size(14.dp)
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(2.dp))
 
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        val badgeVariant = when (place.category) {
-                            PlaceCategory.FUEL -> ShadcnBadgeVariant.Amber
-                            PlaceCategory.MECHANIC_SOS -> ShadcnBadgeVariant.Rose
-                            PlaceCategory.CHECKIN_VIEW -> ShadcnBadgeVariant.Emerald
-                            PlaceCategory.EAT -> ShadcnBadgeVariant.Orange
-                            PlaceCategory.CAFE_REST -> ShadcnBadgeVariant.Amber
-                            PlaceCategory.HOMESTAY -> ShadcnBadgeVariant.Sky
-                        }
-                        ShadcnBadge(text = place.category.label, variant = badgeVariant)
-                        if (place.altitudeMeters > 0) {
-                            Text(
-                                text = "▲ ${place.altitudeMeters}m",
-                                style = TelemetryTextStyle.copy(fontSize = 11.sp),
-                                color = TextMuted
-                            )
-                        }
+                        val altPart = if (place.altitudeMeters > 0) " • ${place.altitudeMeters}m" else ""
+                        Text(
+                            text = "${place.category.label}$altPart",
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp),
+                            color = TextMuted,
+                            maxLines = 1
+                        )
                         if (place.isVisited) {
-                            ShadcnBadge(text = "✓ ĐÃ ĐI", variant = ShadcnBadgeVariant.Emerald)
+                            Text(
+                                text = "• Đã đi",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = EmeraldGreenText
+                            )
                         }
                     }
                 }
 
-                IconButton(onClick = onToggleBookmark, modifier = Modifier.size(34.dp)) {
+                IconButton(onClick = onToggleBookmark, modifier = Modifier.size(32.dp)) {
                     Icon(
                         if (place.isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
                         contentDescription = "Lưu",
                         tint = if (place.isBookmarked) ElectricOrange else TextSubtle,
                         modifier = Modifier
-                            .size(20.dp)
+                            .size(18.dp)
                             .graphicsLayer {
                                 scaleX = bookmarkScale
                                 scaleY = bookmarkScale
@@ -1002,7 +1071,7 @@ fun PlaceRowCard(
                 }
 
                 Box {
-                    IconButton(onClick = { expandedMenu = true }, modifier = Modifier.size(32.dp)) {
+                    IconButton(onClick = { expandedMenu = true }, modifier = Modifier.size(30.dp)) {
                         Icon(Icons.Default.MoreVert, contentDescription = "Tùy chọn", tint = TextSubtle, modifier = Modifier.size(18.dp))
                     }
                     DropdownMenu(
@@ -1010,7 +1079,7 @@ fun PlaceRowCard(
                         onDismissRequest = { expandedMenu = false },
                         modifier = Modifier
                             .background(SurfaceWhite)
-                            .border(BorderStroke(1.dp, BorderSubtle), RoundedCornerShape(12.dp))
+                            .border(BorderStroke(0.8.dp, BorderHairline), RoundedCornerShape(12.dp))
                     ) {
                         DropdownMenuItem(
                             text = { Text(if (place.isVisited) "Đánh dấu chưa đi" else "Đánh dấu đã đi", color = TextPrimary) },
@@ -1046,25 +1115,19 @@ fun PlaceRowCard(
                 }
             }
 
-            if (place.addressHint.isNotBlank()) {
-                Spacer(modifier = Modifier.height(8.dp))
+            val descText = place.practicalTip.ifBlank { place.addressHint }
+            if (descText.isNotBlank()) {
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "📍 ${place.addressHint}",
-                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                    color = TextPrimary
-                )
-            }
-
-            if (place.practicalTip.isNotBlank()) {
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "💡 ${place.practicalTip}",
+                    text = descText,
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary
+                    color = TextSecondary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1073,35 +1136,35 @@ fun PlaceRowCard(
                 ShadcnButton(
                     onClick = onNavigate,
                     variant = ShadcnButtonVariant.Primary,
-                    modifier = Modifier.weight(1f).height(38.dp),
+                    modifier = Modifier.weight(1f).height(34.dp),
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                 ) {
-                    Icon(Icons.Default.Directions, contentDescription = null, modifier = Modifier.size(15.dp))
+                    Icon(Icons.Default.Directions, contentDescription = null, modifier = Modifier.size(14.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Dẫn đường", fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1)
+                    Text("Chỉ đường", fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1)
                 }
 
                 ShadcnButton(
                     onClick = onOpenGoogleMaps,
                     variant = ShadcnButtonVariant.Secondary,
-                    modifier = Modifier.width(86.dp).height(38.dp),
+                    modifier = Modifier.width(84.dp).height(34.dp),
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                 ) {
                     Icon(Icons.Default.Map, contentDescription = "Mở Google Maps", modifier = Modifier.size(14.dp), tint = SkyTelemetry)
                     Spacer(modifier = Modifier.width(3.dp))
-                    Text("G.Maps", fontWeight = FontWeight.SemiBold, fontSize = 11.5.sp, maxLines = 1)
+                    Text("G.Maps", fontWeight = FontWeight.Medium, fontSize = 11.5.sp, maxLines = 1)
                 }
 
                 if (place.phoneNumber.isNotBlank()) {
                     ShadcnButton(
                         onClick = onCall,
                         variant = ShadcnButtonVariant.Secondary,
-                        modifier = Modifier.weight(0.85f).height(38.dp),
+                        modifier = Modifier.weight(0.75f).height(34.dp),
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                     ) {
-                        Icon(Icons.Default.Phone, contentDescription = null, modifier = Modifier.size(15.dp), tint = EmeraldGreen)
+                        Icon(Icons.Default.Phone, contentDescription = null, modifier = Modifier.size(14.dp), tint = EmeraldGreen)
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Gọi điện", fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1)
+                        Text("Gọi", fontWeight = FontWeight.Medium, fontSize = 12.sp, maxLines = 1)
                     }
                 }
             }

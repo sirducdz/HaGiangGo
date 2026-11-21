@@ -1,34 +1,35 @@
 package com.reed.hagianggo.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -46,6 +47,17 @@ import com.reed.hagianggo.ui.theme.*
 import kotlinx.coroutines.delay
 import java.util.Calendar
 import java.util.Locale
+import kotlin.math.roundToInt
+
+private val ApplePanelExpand = expandVertically(
+    animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+    expandFrom = Alignment.Top
+) + fadeIn(animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing))
+
+private val ApplePanelCollapse = shrinkVertically(
+    animationSpec = tween(durationMillis = 190, easing = FastOutSlowInEasing),
+    shrinkTowards = Alignment.Top
+) + fadeOut(animationSpec = tween(durationMillis = 160, easing = FastOutSlowInEasing))
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -151,749 +163,149 @@ fun TodayScreen(
         dayPacingSummary.nodes.associateBy { it.place.id }
     }
 
-    val topClearance = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 72.dp
-    val bottomClearance = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 96.dp
+    val topClearance = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 58.dp
+    val bottomClearance = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 92.dp
+    val screenScrollState = rememberScrollState()
 
-    LazyColumn(
-        modifier = modifier
-            .fillMaxSize()
-            .background(AppBackground),
-        contentPadding = PaddingValues(
-            top = topClearance,
-            bottom = bottomClearance,
-            start = 16.dp,
-            end = 16.dp
-        ),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        // =====================================================================
-        // 1. HERO EDITORIAL CARD: "LÀM GÌ BÂY GIỜ?" KÈM ĐƯỜNG ĐỒNG MỨC TOPO
-        // =====================================================================
-        item(key = "hero_what_now") {
-            ShadcnCard(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(22.dp),
-                backgroundColor = SurfaceWhite,
-                borderColor = ElectricOrangeBorder,
-                onClick = { viewModel.openWhatNow() }
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            Brush.horizontalGradient(
-                                listOf(
-                                    Color(0xFFFFFBF7),
-                                    ElectricOrangeSoft
-                                )
-                            )
-                        )
-                ) {
-                    // Họa tiết đường đồng mức địa hình (Topographic Contours) vẽ bằng Vector Canvas
-                    Canvas(
-                        modifier = Modifier
-                            .matchParentSize()
-                    ) {
-                        val w = size.width
-                        val h = size.height
-                        listOf(0.55f, 0.72f, 0.88f).forEachIndexed { idx, rx ->
-                            val path = Path().apply {
-                                moveTo(w * rx, 0f)
-                                cubicTo(
-                                    w * (rx - 0.12f), h * 0.35f,
-                                    w * (rx + 0.08f), h * 0.70f,
-                                    w * (rx - 0.05f), h
-                                )
-                            }
-                            drawPath(
-                                path = path,
-                                color = ElectricOrange.copy(alpha = 0.08f + idx * 0.03f),
-                                style = Stroke(width = 1.5.dp.toPx())
-                            )
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(18.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(52.dp)
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(
-                                    Brush.linearGradient(
-                                        listOf(ElectricOrange, ElectricOrangeHover)
-                                    )
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Default.AutoAwesome,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(26.dp)
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.width(14.dp))
-
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = "LÀM GÌ BÂY GIỜ?",
-                                    style = MaterialTheme.typography.titleMedium.copy(
-                                        fontWeight = FontWeight.Black,
-                                        letterSpacing = 0.4.sp
-                                    ),
-                                    color = TextPrimary
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                ShadcnBadge(text = "AI ĐÈO NÚI", variant = ShadcnBadgeVariant.Orange)
-                            }
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "Gợi ý điểm ăn, trú mưa, xăng & ngắm cảnh tối ưu ngay tại ${activeZone?.name ?: "Hà Giang"}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = TextSecondary
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.width(8.dp))
-
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(SurfaceWhite)
-                                .border(BorderStroke(1.dp, ElectricOrangeBorder), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Default.ArrowForward,
-                                contentDescription = null,
-                                tint = ElectricOrangeHover,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // =====================================================================
-        // 2. BENTO COCKPIT ROW: LIVE RIDE TELEMETRY × ĐẾM NGƯỢC HOÀNG HÔN ĐÈO
-        // =====================================================================
-        item(key = "bento_cockpit_row") {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                // Bento Trái: Live Ride Mode
-                ShadcnCard(
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(18.dp),
-                    backgroundColor = SurfaceWhite,
-                    borderColor = if (liveRideState.isTracking) EmeraldGreenBorder else BorderSubtle,
-                    onClick = {
-                        if (!liveRideState.isTracking) viewModel.startRide()
-                        viewModel.openCockpit()
-                    }
-                ) {
-                    Column(
-                        modifier = Modifier.padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(34.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(EmeraldGreenSoft),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    Icons.Default.TwoWheeler,
-                                    contentDescription = null,
-                                    tint = EmeraldGreenText,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                            ShadcnBadge(
-                                text = if (liveRideState.isTracking) "LIVE" else "HUD",
-                                variant = ShadcnBadgeVariant.Emerald
-                            )
-                        }
-
-                        if (liveRideState.isTracking) {
-                            RollingNumberText(
-                                targetValue = liveRideState.currentSpeedKmh,
-                                suffix = " km/h",
-                                style = TelemetryTextStyle.copy(fontSize = 20.sp),
-                                color = EmeraldGreenText
-                            )
-                            Text(
-                                text = "${String.format(Locale.US, "%.1f", liveRideState.totalDistanceKm)} km • ${liveRideState.currentAltitude.toInt()}m",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = TextSecondary,
-                                maxLines = 1
-                            )
-                        } else {
-                            Text(
-                                text = "Chế độ Phượt",
-                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                color = TextPrimary
-                            )
-                            Text(
-                                text = "Đo tốc độ, cao độ & tự check-in",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = TextSecondary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-                }
-
-                // Bento Phải: Đồng hồ an toàn Hoàng hôn đèo (Flighty Status Widget)
-                val (sunBg, sunBorder, sunTint) = when {
-                    isNight -> Triple(RoseDestructiveSoft, RoseDestructiveBorder, RoseDestructiveText)
-                    isNearDark -> Triple(AmberWarningSoft, AmberWarningBorder, AmberWarningText)
-                    else -> Triple(SkyTelemetrySoft, SkyTelemetryBorder, SkyTelemetry)
-                }
-
-                ShadcnCard(
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(18.dp),
-                    backgroundColor = SurfaceWhite,
-                    borderColor = sunBorder
-                ) {
-                    Column(
-                        modifier = Modifier.padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(34.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(sunBg),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    if (isNight) Icons.Default.NightsStay else Icons.Default.WbTwilight,
-                                    contentDescription = null,
-                                    tint = sunTint,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                            ShadcnBadge(
-                                text = "17:15 TỐI",
-                                variant = if (isNight) ShadcnBadgeVariant.Rose else if (isNearDark) ShadcnBadgeVariant.Amber else ShadcnBadgeVariant.Sky
-                            )
-                        }
-
-                        Text(
-                            text = when {
-                                isNight -> "Đèo đã tối!"
-                                minutesUntilSunset > 0 -> "Còn ${minutesUntilSunset / 60}h ${minutesUntilSunset % 60}p"
-                                else -> "Sắp tối đèo"
-                            },
-                            style = TelemetryTextStyle.copy(fontSize = 18.sp),
-                            color = if (isNight) RoseDestructiveText else TextPrimary
-                        )
-                        Text(
-                            text = when {
-                                isNight -> "Nghỉ đêm, tránh đổ đèo mù"
-                                isNearDark -> "Chốt homestay & đổ xăng"
-                                isOutsideHaGiang -> "Cách Hà Giang ~${distanceToHaGiangKm?.toInt() ?: 0}km"
-                                else -> "Khung giờ sáng an toàn"
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextSecondary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-            }
-        }
-
-        // =====================================================================
-        // 2B. TRẠM AN TOÀN ĐÈO NÚI: THỜI TIẾT SĂN MÂY × CỨU HỘ SOS × TẦM XĂNG
-        // =====================================================================
-        item(key = "weather_and_sos_row") {
-            val activeWeather = activeZone?.id?.let { weatherForecasts[it] } ?: weatherForecasts.values.firstOrNull()
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                // Bento Thời tiết Đèo & Săn mây
-                ShadcnCard(
-                    modifier = Modifier.weight(1.15f),
-                    shape = RoundedCornerShape(18.dp),
-                    backgroundColor = SurfaceWhite,
-                    borderColor = if (activeWeather?.isFogHazard == true) RoseDestructiveBorder else SkyTelemetryBorder,
-                    onClick = { viewModel.openWeatherSheet() }
-                ) {
-                    Column(
-                        modifier = Modifier.padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(5.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(SkyTelemetrySoft),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    Icons.Default.Cloud,
-                                    contentDescription = null,
-                                    tint = SkyTelemetry,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                            ShadcnBadge(
-                                text = "☁️ MÂY ${activeWeather?.cloudHuntScore ?: 68}%",
-                                variant = if ((activeWeather?.cloudHuntScore ?: 68) >= 70) ShadcnBadgeVariant.Emerald else ShadcnBadgeVariant.Sky
-                            )
-                        }
-
-                        Text(
-                            text = "${activeWeather?.currentTempC ?: 18}°C • ${activeZone?.name?.substringBefore("(")?.trim() ?: "Hà Giang"}",
-                            style = TelemetryTextStyle.copy(fontSize = 15.5.sp),
-                            color = TextPrimary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = activeWeather?.summaryLabel ?: "Xem dự báo 8 cụm đèo & săn mây",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (activeWeather?.isFogHazard == true) RoseDestructiveText else TextSecondary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-
-                // Bento SOS Cứu hộ 2G & Poster Hành trình
-                Column(
-                    modifier = Modifier.weight(0.85f),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    ShadcnCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(15.dp),
-                        backgroundColor = RoseDestructiveSoft,
-                        borderColor = RoseDestructiveBorder,
-                        onClick = { viewModel.openSosSheet() }
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 11.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column {
-                                Text(
-                                    text = "🆘 SOS ĐÈO NÚI",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Black),
-                                    color = RoseDestructiveText
-                                )
-                                Text(
-                                    text = "SMS 2G & Sửa xe",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = TextPrimary,
-                                    maxLines = 1
-                                )
-                            }
-                            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = RoseDestructiveText, modifier = Modifier.size(18.dp))
-                        }
-                    }
-
-                    ShadcnCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(15.dp),
-                        backgroundColor = SurfaceWhite,
-                        borderColor = ElectricOrangeBorder,
-                        onClick = { viewModel.openRecapSheet() }
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column {
-                                Text(
-                                    text = "🖼️ POSTER RECAP",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Black),
-                                    color = ElectricOrangeHover
-                                )
-                                Text(
-                                    text = "Tổng kết hành trình",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = TextSecondary,
-                                    maxLines = 1
-                                )
-                            }
-                            Icon(Icons.Default.AutoAwesomeMotion, contentDescription = null, tint = ElectricOrange, modifier = Modifier.size(16.dp))
-                        }
-                    }
-                }
-            }
-        }
-
-        // Thẻ Cảnh báo Tầm hoạt động Xăng & Điểm mù Cây xăng trên đèo
-        item(key = "fuel_range_guard_card") {
-            val animFuelPct by animateFloatAsState(
-                targetValue = fuelAdvisory.fuelPercent,
-                animationSpec = spring(dampingRatio = 0.84f, stiffness = 320f),
-                label = "FuelBarAnim"
-            )
-            ShadcnCard(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(18.dp),
-                backgroundColor = SurfaceWhite,
-                borderColor = if (fuelAdvisory.isCriticalLow) AmberWarningBorder else BorderSubtle
-            ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(AmberWarningSoft),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    Icons.Default.LocalGasStation,
-                                    contentDescription = null,
-                                    tint = AmberWarningText,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(9.dp))
-                            Column {
-                                Text(
-                                    text = "TẦM XĂNG & CÂY XĂNG ĐÈO",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = if (fuelAdvisory.isCriticalLow) AmberWarningText else TextMuted
-                                )
-                                Text(
-                                    text = "Còn đi được ~${fuelState.remainingKm.toInt()} / ${fuelState.maxRangeKm} km",
-                                    style = TelemetryTextStyle.copy(fontSize = 14.sp),
-                                    color = TextPrimary
-                                )
-                            }
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .background(EmeraldGreenSoft)
-                                .border(BorderStroke(1.dp, EmeraldGreenBorder), CircleShape)
-                                .springClickable { viewModel.markTankRefueled() }
-                                .padding(horizontal = 11.dp, vertical = 6.dp)
-                        ) {
-                            Text(
-                                text = "⛽ Vừa đổ đầy",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = EmeraldGreenText
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // Thanh mức xăng lò xo
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(8.dp)
-                            .clip(CircleShape)
-                            .background(SurfaceMuted)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxHeight()
-                                .fillMaxWidth(animFuelPct.coerceIn(0.04f, 1f))
-                                .clip(CircleShape)
-                                .background(
-                                    when {
-                                        animFuelPct <= 0.28f -> RoseDestructive
-                                        animFuelPct <= 0.50f -> AmberWarning
-                                        else -> EmeraldGreen
-                                    }
-                                )
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // Hàng chọn nhanh vạch xăng trên đồng hồ xe + chỉ đường cây xăng gần nhất
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text("Vạch xe:", style = MaterialTheme.typography.labelSmall, color = TextMuted)
-                            listOf(0.25f to "1/4", 0.5f to "1/2", 0.75f to "3/4").forEach { (frac, label) ->
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(7.dp))
-                                        .background(SurfaceMuted)
-                                        .springClickable { viewModel.setFuelFraction(frac) }
-                                        .padding(horizontal = 7.dp, vertical = 3.5.dp)
-                                ) {
-                                    Text(label, fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
-                                }
-                            }
-                        }
-
-                        fuelAdvisory.nearestStation?.let { station ->
-                            Text(
-                                text = "📍 Gần nhất ~${String.format(Locale.US, "%.1f", fuelAdvisory.distanceToNearestKm)} km",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                                color = ElectricOrangeHover,
-                                modifier = Modifier.clickable {
-                                    viewModel.requestNavigationTo(station)
-                                }
-                            )
-                        }
-                    }
-
-                    if (fuelAdvisory.gapWarningTitle != null && (fuelAdvisory.isCriticalLow || fuelAdvisory.nextGapAheadKm >= 40.0)) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(11.dp))
-                                .background(if (fuelAdvisory.isCriticalLow) RoseDestructiveSoft else AmberWarningSoft)
-                                .padding(horizontal = 10.dp, vertical = 7.dp)
-                        ) {
-                            Text(
-                                text = "⚠ ${fuelAdvisory.gapWarningTitle}: ${fuelAdvisory.gapWarningDetail}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (fuelAdvisory.isCriticalLow) RoseDestructiveText else AmberWarningText
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // =====================================================================
-        // 3. BỘ CHỌN LỊCH TRÌNH LINH HOẠT (ĐÊM ĐỒNG VĂN ↔ LÔ LÔ CHẢI & 3N2Đ/4N3Đ)
-        // =====================================================================
-        item(key = "flexible_itinerary_switcher") {
-            FlexibleItinerarySwitcherCard(
-                duration = config.duration,
-                nightStayVariant = nightStayVariant,
-                isCustomized = isItineraryCustomized,
-                onSelectDuration = { days ->
-                    viewModel.updateTripConfig(config.withDurationDays(days))
-                },
-                onSelectNightStay = { variant ->
-                    viewModel.setNightStayVariant(variant)
-                }
-            )
-        }
-
-        // =====================================================================
-        // 3B. KHAY CHỌN NGÀY TRƯỢT LÒ XO (SLIDING PILL DAY TABS)
-        // =====================================================================
-        item(key = "day_selector") {
-            val daysList = (1..config.durationDays).toList()
-            ShadcnSegmentedTabs(
-                items = daysList,
-                selectedItem = selectedDay.coerceIn(1, config.durationDays),
-                onItemSelected = {
-                    selectedDay = it
-                    highlightedPlaceId = null
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) { day, isSelected ->
-                Text(
-                    text = "Ngày $day",
-                    color = if (isSelected) TextPrimary else TextMuted,
-                    fontSize = 12.5.sp,
-                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                )
-            }
-        }
-
-        // Thanh công cụ Sửa Lịch Trình Cá Nhân gọn (Progressive Disclosure)
-        item(key = "itinerary_editor_toolbar") {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(if (isEditItineraryMode) ElectricOrange else SurfaceWhite)
-                            .border(
-                                BorderStroke(1.dp, if (isEditItineraryMode) ElectricOrangeHover else BorderSubtle),
-                                RoundedCornerShape(10.dp)
-                            )
-                            .springClickable { isEditItineraryMode = !isEditItineraryMode }
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
-                    ) {
-                        Text(
-                            text = if (isEditItineraryMode) "✓ Xong sửa" else "✏️ Sửa lịch trình",
-                            fontSize = 11.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isEditItineraryMode) Color.White else TextPrimary
-                        )
-                    }
-
-                    if (isEditItineraryMode && isItineraryCustomized) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(RoseDestructiveSoft)
-                                .border(BorderStroke(1.dp, RoseDestructiveBorder), RoundedCornerShape(10.dp))
-                                .springClickable { showResetConfirmDialog = true }
-                                .padding(horizontal = 9.dp, vertical = 6.dp)
-                        ) {
-                            Text(
-                                text = "Khôi phục mẫu",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = RoseDestructiveText
-                            )
-                        }
-                    }
-                }
-
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(SkyTelemetrySoft)
-                        .border(BorderStroke(1.dp, SkyTelemetryBorder), RoundedCornerShape(10.dp))
-                        .springClickable {
-                            pickerDefaultSlot = TimeSlot.MORNING
-                            showAddPlacePicker = true
-                        }
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
-                ) {
-                    Text(
-                        text = "+ Thêm điểm",
-                        fontSize = 11.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = SkyTelemetry
-                    )
-                }
-            }
-        }
-
-        // =====================================================================
-        // 4. BIỂU ĐỒ MẶT CẮT ĐỘ CAO ĐÈO ĐỘNG (ALLTRAILS ELEVATION PROFILE)
-        // =====================================================================
-        item(key = "elevation_profile_card") {
-            val dayRouteHint = remember(orderedDayPlaces, dayPacingSummary.totalRoadKm) {
-                ItineraryEditorLogic.buildDynamicDayRouteSubtitle(
-                    places = orderedDayPlaces,
-                    totalRoadKm = dayPacingSummary.totalRoadKm
-                )
-            }
-
-            ElevationProfileCard(
-                dayNumber = selectedDay,
-                dayPlaces = orderedDayPlaces,
-                routeSubtitle = dayRouteHint,
-                onPlaceSelected = { place ->
-                    highlightedPlaceId = place.id
-                }
-            )
-        }
-
-        // =====================================================================
-        // 4B. BỘ ĐIỀU ĐỘ THỜI GIAN & CHỐNG LỐ GIỜ ĐÈO (SMART TIME PACER)
-        // =====================================================================
-        item(key = "day_time_pacer_card") {
-            DayTimePacerCard(
-                dayNumber = selectedDay,
-                summary = dayPacingSummary,
-                isAutoGeofenceEnabled = isAutoGeofenceEnabled,
-                isRideTracking = liveRideState.isTracking,
-                onSelectStartMinutes = { min -> viewModel.setDayStartTime(min) },
-                onEnableLiveNow = {
-                    val cal = Calendar.getInstance()
-                    val nowMin = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
-                    viewModel.enableLiveNowPacer(nowMin)
-                },
-                onSelectPaceFactor = { factor -> viewModel.setRiderPaceFactor(factor) },
-                onToggleAutoGeofence = { viewModel.toggleAutoGeofencePacer() },
-                onStartRideTracking = { viewModel.startRide() },
-                onAutoTrim = {
-                    viewModel.applySmartAutoTrim(
-                        dayStops = orderedDayStops,
-                        startMinutes = dayStartMinutes,
-                        isLiveNowMode = useCurrentClockForPacer
-                    )
-                }
-            )
-        }
-
-        // Thanh đồng hồ đếm ngược khi đang dừng chân tại điểm (Pit-Stop Timer)
-        activeStopTimer?.let { timer ->
-            item(key = "active_pit_stop_banner") {
-                ActivePitStopBanner(
-                    timer = timer,
-                    onAdd10Min = { viewModel.addPitStopMinutes(10) },
-                    onComplete = { viewModel.completePitStop(timer.placeId) },
-                    onCancel = { viewModel.cancelPitStopTimer() }
-                )
-            }
-        }
-
-        // =====================================================================
-        // 5. DÒNG THỜI GIAN HÀNH TRÌNH LIỀN MẠCH (POLARSTEPS TIMELINE + PACER)
-        // =====================================================================
-        listOf(TimeSlot.MORNING, TimeSlot.NOON, TimeSlot.AFTERNOON, TimeSlot.EVENING).forEach { slot ->
+    val groupedDaySlots = remember(daySlots, placesById) {
+        listOf(TimeSlot.MORNING, TimeSlot.NOON, TimeSlot.AFTERNOON, TimeSlot.EVENING).map { slot ->
             val slotsInThisTime = daySlots.filter { it.slot == slot }
             val placesForSlot = slotsInThisTime.flatMap { item ->
                 item.suggestedPlaceIds.mapNotNull { pid -> placesById[pid]?.let { p -> item to p } }
             }
+            Triple(slot, slotsInThisTime.firstOrNull()?.title.orEmpty(), placesForSlot)
+        }
+    }
 
-            item(key = "header_${selectedDay}_${slot.name}") {
-                TimeSlotHeader(slot = slot, count = placesForSlot.size)
+    val dayRouteHint = remember(orderedDayPlaces, dayPacingSummary.totalRoadKm) {
+        ItineraryEditorLogic.buildDynamicDayRouteSubtitle(
+            places = orderedDayPlaces,
+            totalRoadKm = dayPacingSummary.totalRoadKm
+        )
+    }
+    val maxAlt = remember(orderedDayPlaces, selectedDay) {
+        orderedDayPlaces.maxOfOrNull { it.altitudeMeters } ?: 1500
+    }
+    val activeWeather = activeZone?.id?.let { weatherForecasts[it] } ?: weatherForecasts.values.firstOrNull()
+
+    // Dùng Column + verticalScroll thay cho LazyColumn (mỗi ngày chỉ ~10-15 điểm):
+    // Tránh LazyColumn hủy/tạo lại các thẻ địa điểm bên dưới ngay giữa lúc panel "Độ cao & Giờ" đang thu gọn,
+    // giữ 100% khung hình mượt mà không bị khựng khi mở rộng/thu nhỏ panel.
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(AppBackground)
+            .verticalScroll(screenScrollState)
+            .padding(
+                top = topClearance,
+                bottom = bottomClearance,
+                start = 16.dp,
+                end = 16.dp
+            ),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        // =====================================================================
+        // 1. TỔNG QUAN NHANH (THỜI TIẾT • HOÀNG HÔN/HUD/SOS • TẦM XĂNG)
+        // =====================================================================
+        AppleMorningBriefSection(
+            activeZoneName = activeZone?.name?.substringBefore("(")?.trim() ?: "Hà Giang",
+            activeWeather = activeWeather,
+            isNight = isNight,
+            isNearDark = isNearDark,
+            minutesUntilSunset = minutesUntilSunset,
+            isOutsideHaGiang = isOutsideHaGiang,
+            distanceToHaGiangKm = distanceToHaGiangKm,
+            liveRideState = liveRideState,
+            fuelState = fuelState,
+            fuelAdvisory = fuelAdvisory,
+            onOpenWeather = { viewModel.openWeatherSheet() },
+            onOpenSos = { viewModel.openSosSheet() },
+            onOpenHud = {
+                if (!liveRideState.isTracking) viewModel.startRide()
+                viewModel.openCockpit()
+            },
+            onRefuelFull = { viewModel.markTankRefueled() },
+            onSetFuelFraction = { frac -> viewModel.setFuelFraction(frac) },
+            onNavigateToNearestFuel = { station -> viewModel.requestNavigationTo(station) }
+        )
+
+        // =====================================================================
+        // 2. KHAY CHỌN NGÀY + LỘ TRÌNH LINH HOẠT + CÔNG CỤ SỬA
+        // =====================================================================
+        AppleScheduleHeader(
+            duration = config.duration,
+            selectedDay = selectedDay.coerceIn(1, config.durationDays),
+            nightStayVariant = nightStayVariant,
+            isCustomized = isItineraryCustomized,
+            isEditMode = isEditItineraryMode,
+            onSelectDay = { day ->
+                selectedDay = day
+                highlightedPlaceId = null
+            },
+            onSelectDuration = { days -> viewModel.updateTripConfig(config.withDurationDays(days)) },
+            onSelectNightStay = { variant -> viewModel.setNightStayVariant(variant) },
+            onToggleEditMode = { isEditItineraryMode = !isEditItineraryMode },
+            onRequestReset = { showResetConfirmDialog = true },
+            onAddPlace = {
+                pickerDefaultSlot = TimeSlot.MORNING
+                showAddPlacePicker = true
+            }
+        )
+
+        // =====================================================================
+        // 3. TÓM TẮT ĐỊA HÌNH & ĐIỀU ĐỘ GIỜ (THU GỌN / CHẠM MỞ BIỂU ĐỒ)
+        // =====================================================================
+        AppleRouteSummaryCard(
+            dayNumber = selectedDay,
+            dayPlaces = orderedDayPlaces,
+            routeSubtitle = dayRouteHint,
+            maxAltitudeMeters = maxAlt,
+            summary = dayPacingSummary,
+            isAutoGeofenceEnabled = isAutoGeofenceEnabled,
+            isRideTracking = liveRideState.isTracking,
+            onPlaceSelectedOnChart = { place -> highlightedPlaceId = place.id },
+            onSelectStartMinutes = { min -> viewModel.setDayStartTime(min) },
+            onEnableLiveNow = {
+                val cal = Calendar.getInstance()
+                val nowMin = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
+                viewModel.enableLiveNowPacer(nowMin)
+            },
+            onSelectPaceFactor = { factor -> viewModel.setRiderPaceFactor(factor) },
+            onToggleAutoGeofence = { viewModel.toggleAutoGeofencePacer() },
+            onStartRideTracking = { viewModel.startRide() },
+            onAutoTrim = {
+                viewModel.applySmartAutoTrim(
+                    dayStops = orderedDayStops,
+                    startMinutes = dayStartMinutes,
+                    isLiveNowMode = useCurrentClockForPacer
+                )
+            }
+        )
+
+        // Thanh đồng hồ đếm ngược khi đang dừng chân tại điểm (Pit-Stop Timer)
+        activeStopTimer?.let { timer ->
+            ActivePitStopBanner(
+                timer = timer,
+                onAdd10Min = { viewModel.addPitStopMinutes(10) },
+                onComplete = { viewModel.completePitStop(timer.placeId) },
+                onCancel = { viewModel.cancelPitStopTimer() }
+            )
+        }
+
+        // =====================================================================
+        // 4. DÒNG THỜI GIAN HÀNH TRÌNH SẠCH KIỂU APPLE MAPS
+        // =====================================================================
+        groupedDaySlots.forEach { (slot, slotSubtitle, placesForSlot) ->
+            key("header_${selectedDay}_${slot.name}") {
+                TimeSlotHeader(
+                    slot = slot,
+                    count = placesForSlot.size,
+                    slotSubtitle = slotSubtitle
+                )
             }
 
             if (placesForSlot.isEmpty()) {
-                item(key = "empty_${selectedDay}_${slot.name}") {
+                key("empty_${selectedDay}_${slot.name}") {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -920,60 +332,58 @@ fun TodayScreen(
                     }
                 }
             } else {
-                items(
-                    items = placesForSlot,
-                    key = { (slotItem, place) -> "day${selectedDay}_${slotItem.id}_${place.id}" }
-                ) { (slotItem, place) ->
-                    val scheduledNode = scheduledNodeById[place.id]
-                    val isTimerRunningHere = activeStopTimer?.placeId == place.id
-                    val goldenHour = if (scheduledNode != null &&
-                        scheduledNode.status != StopPacingStatus.SKIPPED &&
-                        !place.isVisited
-                    ) {
-                        GoldenHourAdvisor.evaluate(
-                            place = place,
-                            arrivalMin = scheduledNode.arrivalMinutesOfDay,
-                            departMin = scheduledNode.departureMinutesOfDay
-                        )
-                    } else null
-
-                    ItineraryPlaceCard(
-                        place = place,
-                        customNote = slotItem.title,
-                        scheduledNode = scheduledNode,
-                        goldenHour = goldenHour,
-                        vehicle = config.vehicle,
-                        isTimerRunningHere = isTimerRunningHere,
-                        isHighlighted = highlightedPlaceId == place.id,
-                        isEditMode = isEditItineraryMode,
-                        onNavigate = {
-                            viewModel.requestNavigationTo(place)
-                        },
-                        onOpenGoogleMaps = {
-                            LocationMath.openNavigationIntent(context, place.latitude, place.longitude, place.name)
-                        },
-                        onToggleVisited = { viewModel.toggleVisited(place.id) },
-                        onAdjustStayMin = { delta -> viewModel.adjustPlaceStayDuration(place.id, delta) },
-                        onStartPitStopTimer = { viewModel.startPitStopTimer(place) },
-                        onToggleSkipToday = { viewModel.toggleSkipPlaceToday(place.id) },
-                        onQuickSnap = {
-                            viewModel.openQuickSnap(
+                placesForSlot.forEach { (slotItem, place) ->
+                    key("day${selectedDay}_${slotItem.id}_${place.id}") {
+                        val scheduledNode = scheduledNodeById[place.id]
+                        val isTimerRunningHere = activeStopTimer?.placeId == place.id
+                        val goldenHour = if (scheduledNode != null &&
+                            scheduledNode.status != StopPacingStatus.SKIPPED &&
+                            !place.isVisited
+                        ) {
+                            GoldenHourAdvisor.evaluate(
                                 place = place,
-                                dayNumber = selectedDay,
-                                zoneId = place.zoneId
+                                arrivalMin = scheduledNode.arrivalMinutesOfDay,
+                                departMin = scheduledNode.departureMinutesOfDay
                             )
-                        },
-                        onMoveUp = { viewModel.moveItineraryPlace(selectedDay, place.id, -1) },
-                        onMoveDown = { viewModel.moveItineraryPlace(selectedDay, place.id, 1) },
-                        onMoveDaySlot = { movingPlaceState = place to slot },
-                        onRemoveFromDay = { viewModel.removePlaceFromItinerary(selectedDay, place.id) },
-                        onCall = {
-                            if (place.phoneNumber.isNotBlank()) {
-                                LocationMath.openDialerIntent(context, place.phoneNumber)
+                        } else null
+
+                        ItineraryPlaceCard(
+                            place = place,
+                            customNote = slotItem.title,
+                            scheduledNode = scheduledNode,
+                            goldenHour = goldenHour,
+                            vehicle = config.vehicle,
+                            isTimerRunningHere = isTimerRunningHere,
+                            isHighlighted = highlightedPlaceId == place.id,
+                            isEditMode = isEditItineraryMode,
+                            onNavigate = {
+                                viewModel.requestNavigationTo(place)
+                            },
+                            onOpenGoogleMaps = {
+                                LocationMath.openNavigationIntent(context, place.latitude, place.longitude, place.name)
+                            },
+                            onToggleVisited = { viewModel.toggleVisited(place.id) },
+                            onAdjustStayMin = { delta -> viewModel.adjustPlaceStayDuration(place.id, delta) },
+                            onStartPitStopTimer = { viewModel.startPitStopTimer(place) },
+                            onToggleSkipToday = { viewModel.toggleSkipPlaceToday(place.id) },
+                            onQuickSnap = {
+                                viewModel.openQuickSnap(
+                                    place = place,
+                                    dayNumber = selectedDay,
+                                    zoneId = place.zoneId
+                                )
+                            },
+                            onMoveUp = { viewModel.moveItineraryPlace(selectedDay, place.id, -1) },
+                            onMoveDown = { viewModel.moveItineraryPlace(selectedDay, place.id, 1) },
+                            onMoveDaySlot = { movingPlaceState = place to slot },
+                            onRemoveFromDay = { viewModel.removePlaceFromItinerary(selectedDay, place.id) },
+                            onCall = {
+                                if (place.phoneNumber.isNotBlank()) {
+                                    LocationMath.openDialerIntent(context, place.phoneNumber)
+                                }
                             }
-                        },
-                        modifier = Modifier.animateItem()
-                    )
+                        )
+                    }
                 }
             }
         }
@@ -1059,11 +469,589 @@ fun TodayScreen(
 }
 
 @Composable
-private fun DayTimePacerCard(
+private fun AppleMorningBriefSection(
+    activeZoneName: String,
+    activeWeather: ZoneWeatherForecast?,
+    isNight: Boolean,
+    isNearDark: Boolean,
+    minutesUntilSunset: Int,
+    isOutsideHaGiang: Boolean,
+    distanceToHaGiangKm: Double?,
+    liveRideState: LiveRideState,
+    fuelState: FuelState,
+    fuelAdvisory: FuelAdvisory,
+    onOpenWeather: () -> Unit,
+    onOpenSos: () -> Unit,
+    onOpenHud: () -> Unit,
+    onRefuelFull: () -> Unit,
+    onSetFuelFraction: (Float) -> Unit,
+    onNavigateToNearestFuel: (Place) -> Unit
+) {
+    val (sunBg, sunTint) = when {
+        isNight -> RoseDestructiveSoft to RoseDestructiveText
+        isNearDark -> AmberWarningSoft to AmberWarningText
+        else -> SkyTelemetrySoft to SkyTelemetry
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Hàng 1: 2 thẻ Glance ngang nhau (Thời tiết/Mây | Hoàng hôn/HUD/SOS)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Max),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            ShadcnCard(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(),
+                shape = RoundedCornerShape(18.dp),
+                backgroundColor = SurfaceWhite,
+                borderColor = if (activeWeather?.isFogHazard == true) RoseDestructiveBorder else BorderHairline,
+                shadowElevation = 0.dp,
+                onClick = onOpenWeather
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        AppleIconSquircle(
+                            icon = Icons.Default.Cloud,
+                            tint = SkyTelemetry,
+                            backgroundColor = SkyTelemetrySoft,
+                            size = 28.dp,
+                            iconSize = 15.dp
+                        )
+                        Text(
+                            text = "Mây ${activeWeather?.cloudHuntScore ?: 68}%",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = SkyTelemetry
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Row(
+                        verticalAlignment = Alignment.Bottom,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Text(
+                            text = "${activeWeather?.currentTempC ?: 18}°C",
+                            style = TelemetryTextStyle.copy(fontSize = 20.sp),
+                            color = TextPrimary
+                        )
+                        Text(
+                            text = activeZoneName,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(bottom = 2.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(2.dp))
+
+                    Text(
+                        text = activeWeather?.summaryLabel ?: "Dự báo 8 cụm đèo",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp),
+                        color = if (activeWeather?.isFogHazard == true) RoseDestructiveText else TextMuted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            ShadcnCard(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(),
+                shape = RoundedCornerShape(18.dp),
+                backgroundColor = SurfaceWhite,
+                borderColor = if (isNight) RoseDestructiveBorder else BorderHairline,
+                shadowElevation = 0.dp
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        AppleIconSquircle(
+                            icon = if (isNight) Icons.Default.NightsStay else Icons.Default.WbTwilight,
+                            tint = sunTint,
+                            backgroundColor = sunBg,
+                            size = 28.dp,
+                            iconSize = 15.dp
+                        )
+                        Box(
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .background(RoseDestructiveSoft)
+                                .border(BorderStroke(0.8.dp, RoseDestructiveBorder), CircleShape)
+                                .springClickable(onClick = onOpenSos)
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Text(
+                                text = "SOS",
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = RoseDestructiveText
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Column {
+                        Text(
+                            text = when {
+                                isNight -> "Đèo đã tối"
+                                minutesUntilSunset > 0 -> "Còn ${minutesUntilSunset / 60}h ${minutesUntilSunset % 60}p"
+                                else -> "Sắp tối đèo"
+                            },
+                            style = TelemetryTextStyle.copy(fontSize = 18.sp),
+                            color = if (isNight) RoseDestructiveText else TextPrimary,
+                            maxLines = 1
+                        )
+                        Text(
+                            text = when {
+                                isNight && isOutsideHaGiang -> "Nghỉ đêm • Cách ${distanceToHaGiangKm?.toInt() ?: 0}km"
+                                isNight -> "Nghỉ đêm • Sau mốc 17:15"
+                                isOutsideHaGiang -> "Mốc tối 17:15 • Cách ${distanceToHaGiangKm?.toInt() ?: 0}km"
+                                else -> "Trước mốc tối đèo 17:15"
+                            },
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                            color = TextMuted,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(9.dp))
+                            .background(if (liveRideState.isTracking) EmeraldGreenSoft else SurfaceMuted)
+                            .springClickable(onClick = onOpenHud)
+                            .padding(horizontal = 8.dp, vertical = 5.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.TwoWheeler,
+                                contentDescription = null,
+                                tint = if (liveRideState.isTracking) EmeraldGreenText else TextPrimary,
+                                modifier = Modifier.size(13.5.dp)
+                            )
+                            Text(
+                                text = if (liveRideState.isTracking) {
+                                    "LIVE ${liveRideState.currentSpeedKmh.roundToInt()} km/h"
+                                } else {
+                                    "Chế độ Phượt • HUD"
+                                },
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (liveRideState.isTracking) EmeraldGreenText else TextPrimary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Hàng 2: Thanh Tầm Xăng 1 dòng gọn (~46dp), chạm để bung lựa chọn
+        SlimFuelRangeCard(
+            fuelState = fuelState,
+            fuelAdvisory = fuelAdvisory,
+            onRefuelFull = onRefuelFull,
+            onSetFuelFraction = onSetFuelFraction,
+            onNavigateToNearestFuel = onNavigateToNearestFuel
+        )
+    }
+}
+
+@Composable
+private fun SlimFuelRangeCard(
+    fuelState: FuelState,
+    fuelAdvisory: FuelAdvisory,
+    onRefuelFull: () -> Unit,
+    onSetFuelFraction: (Float) -> Unit,
+    onNavigateToNearestFuel: (Place) -> Unit
+) {
+    var isExpanded by rememberSaveable { mutableStateOf(false) }
+    val animFuelPct by animateFloatAsState(
+        targetValue = fuelAdvisory.fuelPercent,
+        animationSpec = spring(dampingRatio = 0.84f, stiffness = 320f),
+        label = "SlimFuelBarAnim"
+    )
+    val barColor = when {
+        animFuelPct <= 0.28f -> RoseDestructive
+        animFuelPct <= 0.50f -> AmberWarning
+        else -> EmeraldGreen
+    }
+
+    ShadcnCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        backgroundColor = SurfaceWhite,
+        borderColor = if (fuelAdvisory.isCriticalLow) AmberWarningBorder else BorderHairline,
+        shadowElevation = 0.dp
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                AppleIconSquircle(
+                    icon = Icons.Default.LocalGasStation,
+                    tint = AmberWarningText,
+                    backgroundColor = AmberWarningSoft,
+                    size = 28.dp,
+                    iconSize = 15.dp
+                )
+                Text(
+                    text = "~${fuelState.remainingKm.toInt()} km",
+                    style = TelemetryTextStyle.copy(fontSize = 13.sp),
+                    color = if (fuelAdvisory.isCriticalLow) AmberWarningText else TextPrimary
+                )
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(6.dp)
+                        .clip(CircleShape)
+                        .background(SurfaceMuted)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth(animFuelPct.coerceIn(0.04f, 1f))
+                            .clip(CircleShape)
+                            .background(barColor)
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(EmeraldGreenSoft)
+                        .springClickable(onClick = onRefuelFull)
+                        .padding(horizontal = 9.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = "Đổ đầy",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = EmeraldGreenText
+                    )
+                }
+                val fuelChevronRot by animateFloatAsState(
+                    targetValue = if (isExpanded || fuelAdvisory.isCriticalLow) 180f else 0f,
+                    animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+                    label = "FuelChevronRot"
+                )
+                Box(
+                    modifier = Modifier
+                        .size(26.dp)
+                        .clip(CircleShape)
+                        .background(SurfaceMuted)
+                        .clickable { isExpanded = !isExpanded },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.KeyboardArrowDown,
+                        contentDescription = "Chi tiết xăng",
+                        tint = TextMuted,
+                        modifier = Modifier
+                            .size(16.dp)
+                            .graphicsLayer { rotationZ = fuelChevronRot }
+                    )
+                }
+            }
+
+            AnimatedVisibility(
+                visible = isExpanded || fuelAdvisory.isCriticalLow,
+                enter = ApplePanelExpand,
+                exit = ApplePanelCollapse
+            ) {
+                Column(
+                    modifier = Modifier.padding(top = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    HorizontalDivider(color = BorderHairline)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Vạch xe:",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = TextMuted
+                            )
+                            listOf(0.25f to "1/4", 0.5f to "1/2", 0.75f to "3/4").forEach { (frac, label) ->
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(7.dp))
+                                        .background(SurfaceMuted)
+                                        .clickable { onSetFuelFraction(frac) }
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        text = label,
+                                        fontSize = 10.5.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = TextSecondary
+                                    )
+                                }
+                            }
+                        }
+
+                        fuelAdvisory.nearestStation?.let { station ->
+                            Text(
+                                text = "Gần nhất ~${String.format(Locale.US, "%.1f", fuelAdvisory.distanceToNearestKm)} km ➔",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = ElectricOrangeHover,
+                                modifier = Modifier.clickable { onNavigateToNearestFuel(station) }
+                            )
+                        }
+                    }
+
+                    if (fuelAdvisory.gapWarningTitle != null &&
+                        (fuelAdvisory.isCriticalLow || fuelAdvisory.nextGapAheadKm >= 40.0)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (fuelAdvisory.isCriticalLow) RoseDestructiveSoft else AmberWarningSoft)
+                                .padding(horizontal = 10.dp, vertical = 7.dp)
+                        ) {
+                            Text(
+                                text = "${fuelAdvisory.gapWarningTitle}: ${fuelAdvisory.gapWarningDetail}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (fuelAdvisory.isCriticalLow) RoseDestructiveText else AmberWarningText
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AppleScheduleHeader(
+    duration: TripDuration,
+    selectedDay: Int,
+    nightStayVariant: NightStayVariant,
+    isCustomized: Boolean,
+    isEditMode: Boolean,
+    onSelectDay: (Int) -> Unit,
+    onSelectDuration: (Int) -> Unit,
+    onSelectNightStay: (NightStayVariant) -> Unit,
+    onToggleEditMode: () -> Unit,
+    onRequestReset: () -> Unit,
+    onAddPlace: () -> Unit
+) {
+    var showVariantDrawer by rememberSaveable { mutableStateOf(false) }
+    val nightNum = if (duration == TripDuration.DAYS_4_NIGHTS_3) 2 else 1
+    val daysList = (1..duration.totalDays).toList()
+    val variantChevronRot by animateFloatAsState(
+        targetValue = if (showVariantDrawer) 180f else 0f,
+        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+        label = "VariantChevronRot"
+    )
+
+    Column {
+        ShadcnSegmentedTabs(
+            items = daysList,
+            selectedItem = selectedDay,
+            onItemSelected = onSelectDay,
+            modifier = Modifier.fillMaxWidth()
+        ) { day, isSelected ->
+            Text(
+                text = "Ngày $day",
+                color = if (isSelected) TextPrimary else TextMuted,
+                fontSize = 12.5.sp,
+                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Viên thuốc chọn Đêm Đồng Văn / Lô Lô Chải & 3N2Đ/4N3Đ (chạm mở ngăn kéo)
+            Surface(
+                modifier = Modifier.clickable { showVariantDrawer = !showVariantDrawer },
+                shape = CircleShape,
+                color = SurfaceWhite,
+                border = BorderStroke(
+                    0.8.dp,
+                    if (showVariantDrawer) ElectricOrangeBorder else BorderHairline
+                )
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    Icon(
+                        Icons.Default.SwapHoriz,
+                        contentDescription = null,
+                        tint = ElectricOrange,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    val durationDisplay = when (duration) {
+                        TripDuration.DAYS_2_NIGHTS_1 -> "2N1Đ"
+                        TripDuration.DAYS_3_NIGHTS_2 -> "3N2Đ"
+                        TripDuration.DAYS_4_NIGHTS_3 -> "4N3Đ"
+                    }
+                    Text(
+                        text = "$durationDisplay • Đêm $nightNum: ${nightStayVariant.shortTitle}",
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = TextPrimary,
+                        maxLines = 1
+                    )
+                    if (isCustomized) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(SkyTelemetry)
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.Default.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = TextMuted,
+                        modifier = Modifier
+                            .size(15.dp)
+                            .graphicsLayer { rotationZ = variantChevronRot }
+                    )
+                }
+            }
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (isEditMode && isCustomized) {
+                    Box(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(RoseDestructiveSoft)
+                            .springClickable(onClick = onRequestReset)
+                            .padding(horizontal = 9.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = "Khôi phục",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = RoseDestructiveText
+                        )
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(if (isEditMode) ElectricOrange else SurfaceWhite)
+                        .border(
+                            BorderStroke(0.8.dp, if (isEditMode) ElectricOrange else BorderHairline),
+                            CircleShape
+                        )
+                        .springClickable(onClick = onToggleEditMode)
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Icon(
+                            if (isEditMode) Icons.Default.Check else Icons.Default.Edit,
+                            contentDescription = null,
+                            tint = if (isEditMode) Color.White else TextSecondary,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Text(
+                            text = if (isEditMode) "Xong" else "Sửa",
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (isEditMode) Color.White else TextPrimary
+                        )
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(SkyTelemetrySoft)
+                        .springClickable(onClick = onAddPlace)
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = "+ Điểm",
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = SkyTelemetry
+                    )
+                }
+            }
+        }
+
+        AnimatedVisibility(
+            visible = showVariantDrawer,
+            enter = ApplePanelExpand,
+            exit = ApplePanelCollapse
+        ) {
+            Box(modifier = Modifier.padding(top = 8.dp)) {
+                FlexibleItinerarySwitcherCard(
+                    duration = duration,
+                    nightStayVariant = nightStayVariant,
+                    isCustomized = isCustomized,
+                    onSelectDuration = onSelectDuration,
+                    onSelectNightStay = onSelectNightStay
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AppleRouteSummaryCard(
     dayNumber: Int,
+    dayPlaces: List<Place>,
+    routeSubtitle: String,
+    maxAltitudeMeters: Int,
     summary: DayPacingSummary,
     isAutoGeofenceEnabled: Boolean,
     isRideTracking: Boolean,
+    onPlaceSelectedOnChart: (Place) -> Unit,
     onSelectStartMinutes: (Int) -> Unit,
     onEnableLiveNow: () -> Unit,
     onSelectPaceFactor: (Float) -> Unit,
@@ -1071,363 +1059,362 @@ private fun DayTimePacerCard(
     onStartRideTracking: () -> Unit,
     onAutoTrim: () -> Unit
 ) {
+    var isExpanded by rememberSaveable { mutableStateOf(false) }
+    val onToggleExpanded = { isExpanded = !isExpanded }
     val isOvertime = summary.overtimeMinutes > 0
     val finishStr = TimePacerEngine.formatMinutesOfDay(summary.finishMinutesOfDay)
     val cutoffStr = TimePacerEngine.formatMinutesOfDay(summary.sunsetCutoffMinutes)
     val bufferMin = (summary.sunsetCutoffMinutes - summary.finishMinutesOfDay).coerceAtLeast(0)
+    val chevronRot by animateFloatAsState(
+        targetValue = if (isExpanded) 180f else 0f,
+        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+        label = "RouteSummaryChevronRot"
+    )
 
     ShadcnCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
         backgroundColor = SurfaceWhite,
-        borderColor = if (isOvertime) RoseDestructiveBorder else EmeraldGreenBorder
+        borderColor = if (isOvertime) RoseDestructiveBorder else BorderHairline,
+        shadowElevation = 0.dp
     ) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            // Tiêu đề + Trạng thái tổng quát
+        Column(modifier = Modifier.padding(13.dp)) {
+            // Hàng trên cùng (chạm để mở rộng / thu gọn Biểu đồ Độ cao & Điều độ Giờ)
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onToggleExpanded),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
+                Text(
+                    text = routeSubtitle,
+                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                    color = TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(34.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(if (isOvertime) RoseDestructiveSoft else EmeraldGreenSoft),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            if (isOvertime) Icons.Default.WarningAmber else Icons.Default.Schedule,
-                            contentDescription = null,
-                            tint = if (isOvertime) RoseDestructiveText else EmeraldGreenText,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(9.dp))
-                    Column {
-                        Text(
-                            text = "ĐIỀU ĐỘ THỜI GIAN NGÀY $dayNumber",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Black),
-                            color = if (isOvertime) RoseDestructiveText else EmeraldGreenText
-                        )
-                        Text(
-                            text = if (summary.isLiveNowMode) {
-                                "🟢 Đang tự động bám sát giờ thật & GPS"
-                            } else {
-                                "Tính giờ chạy đèo & giờ dừng từng điểm"
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (summary.isLiveNowMode) EmeraldGreenText else TextSecondary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-
+                )
                 Spacer(modifier = Modifier.width(8.dp))
-
-                ShadcnBadge(
-                    text = if (isOvertime) "LỐ +${TimePacerEngine.formatDurationHoursMin(summary.overtimeMinutes)}"
-                    else "AN TOÀN ✓",
-                    variant = if (isOvertime) ShadcnBadgeVariant.Rose else ShadcnBadgeVariant.Emerald
-                )
-            }
-
-            // Hàng chọn Giờ Xuất Phát hoặc Tự động theo thực tế (Auto Live)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Nút Tự động theo đồng hồ thực & GPS Live đặt đầu tiên để dễ bật 1 chạm
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (summary.isLiveNowMode) EmeraldGreen else EmeraldGreenSoft)
-                        .border(BorderStroke(1.dp, EmeraldGreenBorder), RoundedCornerShape(8.dp))
-                        .springClickable(onClick = onEnableLiveNow)
-                        .padding(horizontal = 9.dp, vertical = 5.dp)
-                ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
-                        text = if (summary.isLiveNowMode) {
-                            "🟢 Live thực tế (${TimePacerEngine.formatMinutesOfDay(summary.startMinutesOfDay)})"
-                        } else {
-                            "⚡ Tự động theo giờ thực"
-                        },
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 11.sp),
-                        color = if (summary.isLiveNowMode) Color.White else EmeraldGreenText
-                    )
-                }
-
-                Text(
-                    text = "hoặc:",
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                    color = TextMuted
-                )
-                listOf(
-                    390 to "06:30",
-                    420 to "07:00",
-                    450 to "07:30",
-                    480 to "08:00",
-                    510 to "08:30",
-                    540 to "09:00"
-                ).forEach { (minVal, label) ->
-                    val isSelected = !summary.isLiveNowMode && summary.startMinutesOfDay == minVal
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (isSelected) ElectricOrange else SurfaceMuted)
-                            .border(
-                                BorderStroke(1.dp, if (isSelected) ElectricOrangeHover else BorderSubtle),
-                                RoundedCornerShape(8.dp)
-                            )
-                            .springClickable { onSelectStartMinutes(minVal) }
-                            .padding(horizontal = 9.dp, vertical = 5.dp)
-                    ) {
-                        Text(
-                            text = label,
-                            style = TelemetryTextStyle.copy(fontSize = 11.sp),
-                            color = if (isSelected) Color.White else TextPrimary
-                        )
-                    }
-                }
-            }
-
-            // Hàng 2: Nhịp độ tay lái thực tế + Công tắc Auto Geofence GPS (250m)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Tay lái:",
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                    color = TextMuted
-                )
-                listOf(
-                    0.85f to "Nhanh 0.85x",
-                    1.0f to "Chuẩn 1.0x",
-                    1.20f to "Thong thả 1.2x"
-                ).forEach { (factorVal, label) ->
-                    val isSelected = kotlin.math.abs(summary.riderPaceFactor - factorVal) < 0.06f
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (isSelected) SkyTelemetry else SurfaceMuted)
-                            .border(
-                                BorderStroke(1.dp, if (isSelected) SkyTelemetry else BorderSubtle),
-                                RoundedCornerShape(8.dp)
-                            )
-                            .springClickable { onSelectPaceFactor(factorVal) }
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            text = label,
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 10.5.sp
-                            ),
-                            color = if (isSelected) Color.White else TextSecondary
-                        )
-                    }
-                }
-
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (isAutoGeofenceEnabled) EmeraldGreenSoft else SurfaceMuted)
-                        .border(
-                            BorderStroke(1.dp, if (isAutoGeofenceEnabled) EmeraldGreenBorder else BorderSubtle),
-                            RoundedCornerShape(8.dp)
-                        )
-                        .springClickable(onClick = onToggleAutoGeofence)
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                ) {
-                    Text(
-                        text = if (isAutoGeofenceEnabled) "🛰️ Tự bấm giờ GPS: BẬT" else "🛰️ Tự bấm giờ GPS: TẮT",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 10.5.sp
-                        ),
-                        color = if (isAutoGeofenceEnabled) EmeraldGreenText else TextMuted
-                    )
-                }
-            }
-
-            if (isAutoGeofenceEnabled && !isRideTracking) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(SkyTelemetrySoft)
-                        .border(BorderStroke(1.dp, SkyTelemetryBorder), RoundedCornerShape(10.dp))
-                        .springClickable(onClick = onStartRideTracking)
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = "🛰️ Bật Chế độ Phượt (HUD) để tự check-in & rung báo cả khi tắt màn hình",
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp),
-                        color = SkyTelemetry,
-                        modifier = Modifier.weight(1f),
-                        maxLines = 2
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Bật HUD",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 11.sp
-                        ),
+                        text = "Độ cao & Giờ",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
                         color = ElectricOrangeHover
                     )
+                    Icon(
+                        imageVector = Icons.Default.KeyboardArrowDown,
+                        contentDescription = if (isExpanded) "Thu gọn" else "Mở rộng",
+                        tint = ElectricOrangeHover,
+                        modifier = Modifier
+                            .size(16.dp)
+                            .graphicsLayer { rotationZ = chevronRot }
+                    )
                 }
             }
 
-            // 3 Ô Bento Thông số Thời gian Tổng hợp
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // 3 chỉ số Apple Fitness nằm ngang ngăn bằng vạch dọc mảnh
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(IntrinsicSize.Min)
+                    .clickable(onClick = onToggleExpanded),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(SurfaceMuted)
-                        .padding(horizontal = 10.dp, vertical = 8.dp)
-                ) {
-                    Column {
-                        Text("TỔNG CHẠY XE", style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.5.sp), color = TextMuted)
-                        Text(
-                            text = TimePacerEngine.formatDurationHoursMin(summary.totalRideMinutes),
-                            style = TelemetryTextStyle.copy(fontSize = 14.sp),
-                            color = TextPrimary
-                        )
-                        Text(
-                            text = "~${String.format(Locale.US, "%.0f", summary.totalRoadKm)} km đèo",
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                            color = TextSecondary
-                        )
-                    }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Quãng đường",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextMuted
+                    )
+                    Text(
+                        text = "~${summary.totalRoadKm.roundToInt()} km",
+                        style = TelemetryTextStyle.copy(fontSize = 15.sp),
+                        color = TextPrimary
+                    )
+                    Text(
+                        text = "${TimePacerEngine.formatDurationHoursMin(summary.totalRideMinutes)} chạy xe",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.5.sp),
+                        color = TextMuted
+                    )
                 }
 
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(SurfaceMuted)
-                        .padding(horizontal = 10.dp, vertical = 8.dp)
-                ) {
-                    Column {
-                        Text("TỔNG DỪNG CHƠI", style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.5.sp), color = TextMuted)
-                        Text(
-                            text = TimePacerEngine.formatDurationHoursMin(summary.totalStayMinutes),
-                            style = TelemetryTextStyle.copy(fontSize = 14.sp),
-                            color = TextPrimary
-                        )
-                        val activeCount = summary.nodes.count { it.status != StopPacingStatus.SKIPPED && it.status != StopPacingStatus.COMPLETED }
-                        Text(
-                            text = "$activeCount điểm dừng",
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                            color = TextSecondary
-                        )
-                    }
+                VerticalDivider(color = BorderHairline, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Đỉnh đèo",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextMuted
+                    )
+                    Text(
+                        text = "${maxAltitudeMeters}m",
+                        style = TelemetryTextStyle.copy(fontSize = 15.sp),
+                        color = EmeraldGreenText
+                    )
+                    Text(
+                        text = "${dayPlaces.size} điểm dừng",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.5.sp),
+                        color = TextMuted
+                    )
                 }
 
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(if (isOvertime) RoseDestructiveSoft else EmeraldGreenSoft)
-                        .border(
-                            BorderStroke(1.dp, if (isOvertime) RoseDestructiveBorder else EmeraldGreenBorder),
-                            RoundedCornerShape(12.dp)
-                        )
-                        .padding(horizontal = 10.dp, vertical = 8.dp)
-                ) {
-                    Column {
-                        Text(
-                            text = "VỀ TỚI NGHỈ ĐÊM",
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.5.sp),
-                            color = if (isOvertime) RoseDestructiveText else EmeraldGreenText
-                        )
-                        Text(
-                            text = finishStr,
-                            style = TelemetryTextStyle.copy(fontSize = 15.sp),
-                            color = if (isOvertime) RoseDestructiveText else EmeraldGreenText
-                        )
-                        Text(
-                            text = "Mốc tối: $cutoffStr",
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                            color = if (isOvertime) RoseDestructiveText else EmeraldGreenText
-                        )
-                    }
+                VerticalDivider(color = BorderHairline, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Về nghỉ đêm",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextMuted
+                    )
+                    Text(
+                        text = finishStr,
+                        style = TelemetryTextStyle.copy(fontSize = 15.sp),
+                        color = if (isOvertime) RoseDestructiveText else EmeraldGreenText
+                    )
+                    Text(
+                        text = if (isOvertime) {
+                            "Trễ +${TimePacerEngine.formatDurationHoursMin(summary.overtimeMinutes)}"
+                        } else {
+                            "Trước $cutoffStr"
+                        },
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.5.sp),
+                        color = if (isOvertime) RoseDestructiveText else TextMuted
+                    )
                 }
             }
 
-            // Hộp Cảnh báo Lố giờ hoặc Xác nhận An toàn + Nút Tự động Rút ngắn
-            if (isOvertime) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(RoseDestructiveSoft.copy(alpha = 0.7f))
-                        .border(BorderStroke(1.dp, RoseDestructiveBorder), RoundedCornerShape(12.dp))
-                        .padding(11.dp)
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            // Nếu lố giờ ngay ở trạng thái thu gọn -> hiện mượt không nhảy khung
+            AnimatedVisibility(
+                visible = isOvertime && !isExpanded && summary.canAutoTrim,
+                enter = ApplePanelExpand,
+                exit = ApplePanelCollapse
+            ) {
+                Box(modifier = Modifier.padding(top = 10.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(RoseDestructiveSoft)
+                            .springClickable(onClick = onAutoTrim)
+                            .padding(horizontal = 10.dp, vertical = 7.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(
-                            text = "⚠️ Lịch trình đang bị lố ${TimePacerEngine.formatDurationHoursMin(summary.overtimeMinutes)} sau mốc sương mù đèo ($cutoffStr)!",
-                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                            text = "Lố mốc $cutoffStr • Chạm để tự tối ưu giờ về",
+                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = RoseDestructiveText,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            text = "Tối ưu",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
                             color = RoseDestructiveText
                         )
-                        if (!summary.autoTrimHint.isNullOrBlank()) {
+                    }
+                }
+            }
+
+            // Phần mở rộng: Biểu đồ độ cao tương tác + Bộ điều chỉnh giờ chạy (padding nằm TRONG AnimatedVisibility để thu gọn êm tuyệt đối)
+            AnimatedVisibility(
+                visible = isExpanded,
+                enter = ApplePanelExpand,
+                exit = ApplePanelCollapse
+            ) {
+                Column(
+                    modifier = Modifier.padding(top = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    HorizontalDivider(color = BorderHairline)
+
+                    ElevationProfileCard(
+                        dayNumber = dayNumber,
+                        dayPlaces = dayPlaces,
+                        routeSubtitle = routeSubtitle,
+                        onPlaceSelected = onPlaceSelectedOnChart,
+                        embedded = true
+                    )
+
+                    // Hàng chọn Giờ Xuất Phát (dùng clickable nhẹ thay cho springClickable để mở/đóng panel 0ms trễ)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (summary.isLiveNowMode) EmeraldGreen else EmeraldGreenSoft)
+                                .clickable(onClick = onEnableLiveNow)
+                                .padding(horizontal = 9.dp, vertical = 5.dp)
+                        ) {
                             Text(
-                                text = "💡 Gợi ý: ${summary.autoTrimHint}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = TextPrimary
+                                text = if (summary.isLiveNowMode) {
+                                    "Live (${TimePacerEngine.formatMinutesOfDay(summary.startMinutesOfDay)})"
+                                } else {
+                                    "Theo giờ thực"
+                                },
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (summary.isLiveNowMode) Color.White else EmeraldGreenText
                             )
                         }
-                        if (summary.canAutoTrim) {
-                            ShadcnButton(
-                                onClick = onAutoTrim,
-                                variant = ShadcnButtonVariant.Primary,
-                                modifier = Modifier.fillMaxWidth().height(36.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+
+                        listOf(
+                            390 to "06:30",
+                            420 to "07:00",
+                            450 to "07:30",
+                            480 to "08:00",
+                            510 to "08:30",
+                            540 to "09:00"
+                        ).forEach { (minVal, label) ->
+                            val isSelected = !summary.isLiveNowMode && summary.startMinutesOfDay == minVal
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isSelected) ElectricOrange else SurfaceMuted)
+                                    .clickable { onSelectStartMinutes(minVal) }
+                                    .padding(horizontal = 9.dp, vertical = 5.dp)
                             ) {
-                                Icon(Icons.Default.AutoFixHigh, contentDescription = null, modifier = Modifier.size(15.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "Tự động co giờ dừng để kịp về trước $cutoffStr",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
+                                    text = label,
+                                    style = TelemetryTextStyle.copy(fontSize = 11.sp),
+                                    color = if (isSelected) Color.White else TextPrimary
                                 )
                             }
                         }
                     }
-                }
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(11.dp))
-                        .background(EmeraldGreenSoft.copy(alpha = 0.65f))
-                        .padding(horizontal = 11.dp, vertical = 7.dp)
-                ) {
-                    Text(
-                        text = "✓ Tiến độ rất đẹp! Bạn sẽ hoàn thành điểm cuối lúc $finishStr (dư $bufferMin phút trước khi sương mù xuống).",
-                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                        color = EmeraldGreenText
-                    )
+
+                    // Hàng Nhịp độ tay lái + Auto Geofence
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Nhịp chạy:",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextMuted
+                        )
+                        listOf(
+                            0.85f to "Nhanh 0.85x",
+                            1.0f to "Chuẩn 1.0x",
+                            1.20f to "Thong thả 1.2x"
+                        ).forEach { (factorVal, label) ->
+                            val isSelected = kotlin.math.abs(summary.riderPaceFactor - factorVal) < 0.06f
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isSelected) SkyTelemetry else SurfaceMuted)
+                                    .clickable { onSelectPaceFactor(factorVal) }
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = label,
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (isSelected) Color.White else TextSecondary
+                                )
+                            }
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isAutoGeofenceEnabled) EmeraldGreenSoft else SurfaceMuted)
+                                .clickable(onClick = onToggleAutoGeofence)
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = if (isAutoGeofenceEnabled) "GPS 250m: Bật" else "GPS 250m: Tắt",
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (isAutoGeofenceEnabled) EmeraldGreenText else TextMuted
+                            )
+                        }
+                    }
+
+                    if (isAutoGeofenceEnabled && !isRideTracking) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(SkyTelemetrySoft)
+                                .clickable(onClick = onStartRideTracking)
+                                .padding(horizontal = 10.dp, vertical = 7.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "Bật HUD Chế độ Phượt để tự check-in cả khi tắt màn hình",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                color = SkyTelemetry,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(
+                                text = "Bật HUD",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = ElectricOrangeHover
+                            )
+                        }
+                    }
+
+                    if (isOvertime) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(RoseDestructiveSoft)
+                                .padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "Lịch đang lố ${TimePacerEngine.formatDurationHoursMin(summary.overtimeMinutes)} sau $cutoffStr.",
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = RoseDestructiveText
+                            )
+                            if (!summary.autoTrimHint.isNullOrBlank()) {
+                                Text(
+                                    text = summary.autoTrimHint,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextPrimary
+                                )
+                            }
+                            if (summary.canAutoTrim) {
+                                ShadcnButton(
+                                    onClick = onAutoTrim,
+                                    variant = ShadcnButtonVariant.Primary,
+                                    modifier = Modifier.fillMaxWidth().height(34.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
+                                ) {
+                                    Text("Tự động co giờ để kịp về trước $cutoffStr", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold)
+                                }
+                            }
+                        }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(EmeraldGreenSoft.copy(alpha = 0.7f))
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = "Tiến độ an toàn: dự kiến hoàn thành lúc $finishStr (dư $bufferMin phút trước khi tối).",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = EmeraldGreenText
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -1487,11 +1474,11 @@ private fun ActivePitStopBanner(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = when {
-                            isOver -> "⚠️ ĐÃ QUÁ GIỜ DỪNG • ĐANG ĐẨY LÙI LỊCH TRÌNH!"
-                            timer.isAutoGeofence -> "🛰️ GPS TỰ ĐỘNG NHẬN DIỆN BẠN ĐANG DỪNG TẠI ĐIỂM"
-                            else -> "⏱️ ĐANG DỪNG CHƠI / NGHỈ TẠI ĐIỂM"
+                            isOver -> "Đã quá giờ dừng • Đang đẩy lùi lịch trình"
+                            timer.isAutoGeofence -> "GPS nhận diện bạn đang dừng tại điểm"
+                            else -> "Đang đếm giờ dừng nghỉ tại điểm"
                         },
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Black),
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                         color = if (isOver) RoseDestructiveText else ElectricOrangeHover
                     )
                     Text(
@@ -1573,43 +1560,66 @@ private fun ActivePitStopBanner(
 }
 
 @Composable
-fun TimeSlotHeader(slot: TimeSlot, count: Int = 0) {
-    Row(
+fun TimeSlotHeader(
+    slot: TimeSlot,
+    count: Int = 0,
+    slotSubtitle: String = ""
+) {
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 6.dp, bottom = 2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+        verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            val (icon, color, softBg) = when (slot) {
-                TimeSlot.MORNING -> Triple(Icons.Default.WbTwilight, ElectricOrange, ElectricOrangeSoft)
-                TimeSlot.NOON -> Triple(Icons.Default.WbSunny, AmberWarningText, AmberWarningSoft)
-                TimeSlot.AFTERNOON -> Triple(Icons.Default.Terrain, SkyTelemetry, SkyTelemetrySoft)
-                TimeSlot.EVENING -> Triple(Icons.Default.NightsStay, TextSecondary, SurfaceMuted)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                val (icon, color, softBg) = when (slot) {
+                    TimeSlot.MORNING -> Triple(Icons.Default.WbTwilight, ElectricOrange, ElectricOrangeSoft)
+                    TimeSlot.NOON -> Triple(Icons.Default.WbSunny, AmberWarningText, AmberWarningSoft)
+                    TimeSlot.AFTERNOON -> Triple(Icons.Default.Terrain, SkyTelemetry, SkyTelemetrySoft)
+                    TimeSlot.EVENING -> Triple(Icons.Default.NightsStay, TextSecondary, SurfaceMuted)
+                }
+                AppleIconSquircle(
+                    icon = icon,
+                    tint = color,
+                    backgroundColor = softBg,
+                    size = 24.dp,
+                    iconSize = 13.5.dp,
+                    cornerRadius = 7.dp
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "${slot.label} • ${slot.timeRange}",
+                    style = MaterialTheme.typography.titleSmall.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 13.5.sp,
+                        letterSpacing = (-0.2).sp
+                    ),
+                    color = TextPrimary
+                )
             }
-            Box(
-                modifier = Modifier
-                    .size(26.dp)
-                    .clip(CircleShape)
-                    .background(softBg),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(14.dp))
+
+            if (count > 0) {
+                Text(
+                    text = "$count điểm",
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
+                    color = TextMuted
+                )
             }
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "${slot.label.uppercase()} • ${slot.timeRange}",
-                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                color = TextPrimary
-            )
         }
 
-        if (count > 0) {
+        if (slotSubtitle.isNotBlank()) {
             Text(
-                text = "$count chặng dừng",
-                style = MaterialTheme.typography.labelSmall,
-                color = TextMuted
+                text = slotSubtitle,
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp),
+                color = TextMuted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 32.dp)
             )
         }
     }
@@ -1642,7 +1652,7 @@ fun ItineraryPlaceCard(
     val isSkipped = scheduledNode?.status == StopPacingStatus.SKIPPED
     val isOvertime = scheduledNode?.status == StopPacingStatus.OVERTIME_LATE
     val isNearDusk = scheduledNode?.status == StopPacingStatus.NEAR_DUSK
-    var showPhotoTip by remember(place.id) { mutableStateOf(false) }
+    var isDetailsExpanded by remember(place.id) { mutableStateOf(false) }
 
     val checkScale by animateFloatAsState(
         targetValue = if (place.isVisited) 1.15f else 1f,
@@ -1653,479 +1663,440 @@ fun ItineraryPlaceCard(
         targetValue = when {
             place.isVisited -> EmeraldGreen
             isOvertime -> RoseDestructive
-            else -> BorderMedium
+            else -> BorderHairline
         },
         animationSpec = tween(220),
         label = "TimelineRailColor"
     )
 
-    Column(modifier = modifier.fillMaxWidth()) {
-        // Thanh nối thời gian chạy xe đèo từ điểm trước tới điểm này
-        if (scheduledNode != null && scheduledNode.legTravelMin > 0 && !isSkipped) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier.width(26.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .width(2.dp)
-                            .height(26.dp)
-                            .background(railColor.copy(alpha = 0.5f))
-                    )
-                }
-                Spacer(modifier = Modifier.width(8.dp))
-                Box(
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(if (scheduledNode.isFromLiveGps) EmeraldGreenSoft else SkyTelemetrySoft)
-                        .border(
-                            BorderStroke(1.dp, if (scheduledNode.isFromLiveGps) EmeraldGreenBorder else SkyTelemetryBorder),
-                            CircleShape
-                        )
-                        .padding(horizontal = 10.dp, vertical = 3.5.dp)
-                ) {
-                    val vehIcon = if (vehicle == VehicleType.MOTORBIKE) "🛵" else "🚗"
-                    val legText = if (scheduledNode.isFromLiveGps) {
-                        "🛰️ Từ vị trí GPS của bạn • ~${String.format(Locale.US, "%.1f", scheduledNode.legRoadKm)} km (~${scheduledNode.legTravelMin} phút)"
-                    } else {
-                        "$vehIcon Chạy đèo ~${String.format(Locale.US, "%.1f", scheduledNode.legRoadKm)} km • Mất ~${scheduledNode.legTravelMin} phút"
-                    }
-                    Text(
-                        text = legText,
-                        style = TelemetryTextStyle.copy(fontSize = 10.5.sp),
-                        color = if (scheduledNode.isFromLiveGps) EmeraldGreenText else SkyTelemetry
-                    )
-                }
-            }
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(IntrinsicSize.Min)
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(IntrinsicSize.Min)
+    ) {
+        // Cột nối Timeline gọn bên trái
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.width(22.dp)
         ) {
-            // Cột nối Timeline kiểu Polarsteps bên trái
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.width(26.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .width(2.dp)
-                        .height(14.dp)
-                        .background(railColor.copy(alpha = 0.5f))
-                )
-                Box(
-                    modifier = Modifier
-                        .size(22.dp)
-                        .graphicsLayer {
-                            scaleX = checkScale
-                            scaleY = checkScale
+            Box(
+                modifier = Modifier
+                    .width(1.5.dp)
+                    .height(14.dp)
+                    .background(railColor)
+            )
+            Box(
+                modifier = Modifier
+                    .size(20.dp)
+                    .graphicsLayer {
+                        scaleX = checkScale
+                        scaleY = checkScale
+                    }
+                    .clip(CircleShape)
+                    .background(
+                        when {
+                            place.isVisited -> EmeraldGreen
+                            isSkipped -> SurfaceMuted
+                            else -> SurfaceWhite
                         }
-                        .clip(CircleShape)
-                        .background(
+                    )
+                    .border(
+                        BorderStroke(
+                            1.8.dp,
                             when {
                                 place.isVisited -> EmeraldGreen
-                                isSkipped -> SurfaceMuted
-                                else -> SurfaceWhite
+                                isSkipped -> BorderMedium
+                                isOvertime -> RoseDestructive
+                                else -> ElectricOrange
                             }
-                        )
-                        .border(
-                            BorderStroke(
-                                2.dp,
-                                when {
-                                    place.isVisited -> EmeraldGreen
-                                    isSkipped -> BorderMedium
-                                    isOvertime -> RoseDestructive
-                                    else -> ElectricOrange
-                                }
-                            ),
-                            CircleShape
-                        )
-                        .springClickable(onClick = onToggleVisited),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (place.isVisited) {
-                        Icon(
-                            Icons.Default.Check,
-                            contentDescription = "Đã ghé",
-                            tint = Color.White,
-                            modifier = Modifier.size(13.dp)
-                        )
-                    }
-                }
-                Box(
-                    modifier = Modifier
-                        .width(2.dp)
-                        .weight(1f)
-                        .background(railColor.copy(alpha = 0.5f))
-                )
-            }
-
-            Spacer(modifier = Modifier.width(8.dp))
-
-            // Thẻ chi tiết địa điểm
-            ShadcnCard(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(bottom = 6.dp),
-                shape = RoundedCornerShape(16.dp),
-                backgroundColor = if (place.isVisited || isSkipped) SurfaceMuted.copy(alpha = 0.6f) else SurfaceWhite,
-                borderColor = when {
-                    isTimerRunningHere -> ElectricOrange
-                    isHighlighted -> ElectricOrange
-                    isOvertime -> RoseDestructiveBorder
-                    place.isVisited -> EmeraldGreenBorder
-                    else -> BorderSubtle
-                },
-                borderWidth = if (isHighlighted || isTimerRunningHere) 1.5.dp else 1.dp
+                        ),
+                        CircleShape
+                    )
+                    .springClickable(onClick = onToggleVisited),
+                contentAlignment = Alignment.Center
             ) {
-                Column(modifier = Modifier.padding(13.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
+                if (place.isVisited) {
+                    Icon(
+                        Icons.Default.Check,
+                        contentDescription = "Đã ghé",
+                        tint = Color.White,
+                        modifier = Modifier.size(12.dp)
+                    )
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .width(1.5.dp)
+                    .weight(1f)
+                    .background(railColor)
+            )
+        }
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        // Thẻ địa điểm chuẩn Apple Maps: thoáng, ít chữ thừa, chạm mở tinh chỉnh sâu
+        ShadcnCard(
+            modifier = Modifier
+                .weight(1f)
+                .padding(bottom = 8.dp),
+            shape = RoundedCornerShape(18.dp),
+            backgroundColor = if (place.isVisited || isSkipped) SurfaceMuted.copy(alpha = 0.6f) else SurfaceWhite,
+            borderColor = when {
+                isTimerRunningHere -> ElectricOrange
+                isHighlighted -> ElectricOrange
+                isOvertime -> RoseDestructiveBorder
+                else -> BorderHairline
+            },
+            borderWidth = if (isHighlighted || isTimerRunningHere) 1.4.dp else 0.8.dp,
+            shadowElevation = 0.dp
+        ) {
+            Column(modifier = Modifier.padding(13.dp)) {
+                // Dòng 1: Giờ chạy & Cự ly leg trên cùng 1 dòng thanh thoát
+                if (scheduledNode != null) {
+                    if (isSkipped) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Text(
-                                text = place.name,
-                                style = MaterialTheme.typography.titleSmall.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    textDecoration = if (place.isVisited || isSkipped) {
-                                        androidx.compose.ui.text.style.TextDecoration.LineThrough
-                                    } else null
-                                ),
-                                color = if (place.isVisited || isSkipped) TextMuted else TextPrimary
+                                text = "Đã tạm bỏ qua hôm nay",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
+                                color = TextMuted
                             )
-                            Spacer(modifier = Modifier.height(3.dp))
+                            if (onToggleSkipToday != null) {
+                                Text(
+                                    text = "Đi lại",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                    color = ElectricOrangeHover,
+                                    modifier = Modifier.clickable(onClick = onToggleSkipToday)
+                                )
+                            }
+                        }
+                    } else {
+                        val arrivalStr = TimePacerEngine.formatMinutesOfDay(scheduledNode.arrivalMinutesOfDay)
+                        val departStr = TimePacerEngine.formatMinutesOfDay(scheduledNode.departureMinutesOfDay)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                modifier = Modifier.weight(1f)
                             ) {
-                                ShadcnBadge(
-                                    text = place.category.label,
-                                    variant = ShadcnBadgeVariant.Orange
-                                )
                                 Text(
-                                    text = "▲ ${place.altitudeMeters}m",
-                                    style = TelemetryTextStyle.copy(fontSize = 11.sp),
-                                    color = TextMuted
+                                    text = "$arrivalStr – $departStr",
+                                    style = TelemetryTextStyle.copy(fontSize = 11.5.sp),
+                                    color = when {
+                                        isOvertime -> RoseDestructiveText
+                                        isNearDusk -> AmberWarningText
+                                        else -> ElectricOrangeHover
+                                    }
                                 )
-                            }
-                        }
-
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                            if (onQuickSnap != null) {
-                                IconButton(onClick = onQuickSnap, modifier = Modifier.size(34.dp)) {
-                                    Icon(
-                                        Icons.Default.PhotoCamera,
-                                        contentDescription = "Chụp Watermark",
-                                        tint = SkyTelemetry,
-                                        modifier = Modifier.size(18.dp)
+                                if (scheduledNode.legTravelMin > 0) {
+                                    val prefix = if (scheduledNode.isFromLiveGps) "  •  GPS" else "  •  Lái"
+                                    Text(
+                                        text = "$prefix ${scheduledNode.legTravelMin}p (${String.format(Locale.US, "%.1f", scheduledNode.legRoadKm)}km)",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Normal),
+                                        color = TextMuted,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
                             }
-                            if (place.phoneNumber.isNotBlank()) {
-                                IconButton(onClick = onCall, modifier = Modifier.size(34.dp)) {
-                                    Icon(Icons.Default.Phone, contentDescription = "Gọi", tint = EmeraldGreenText, modifier = Modifier.size(17.dp))
-                                }
+
+                            when {
+                                isOvertime -> Text(
+                                    text = "Sau 17:15",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                    color = RoseDestructiveText
+                                )
+                                goldenHour?.match == GoldenHourMatch.OPTIMAL -> Text(
+                                    text = "Giờ vàng",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                    color = EmeraldGreenText
+                                )
                             }
                         }
                     }
+                    Spacer(modifier = Modifier.height(5.dp))
+                }
 
-                    // Dải Giờ Đến -> Thời lượng ở lại -> Giờ chốt phải rời đi
-                    if (scheduledNode != null) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        if (isSkipped) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(SurfaceWhite)
-                                    .border(BorderStroke(1.dp, BorderSubtle), RoundedCornerShape(10.dp))
-                                    .padding(horizontal = 10.dp, vertical = 7.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "⏭️ Đã tạm bỏ qua để kịp giờ về",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                                    color = TextMuted
-                                )
-                                if (onToggleSkipToday != null) {
-                                    Text(
-                                        text = "↩️ Đi lại điểm này",
-                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                        color = ElectricOrangeHover,
-                                        modifier = Modifier.clickable(onClick = onToggleSkipToday)
-                                    )
-                                }
-                            }
-                        } else {
-                            val arrivalStr = TimePacerEngine.formatMinutesOfDay(scheduledNode.arrivalMinutesOfDay)
-                            val departStr = TimePacerEngine.formatMinutesOfDay(scheduledNode.departureMinutesOfDay)
-                            val boxBg = when {
-                                isOvertime -> RoseDestructiveSoft
-                                isNearDusk -> AmberWarningSoft
-                                else -> SurfaceMuted
-                            }
-                            val boxBorder = when {
-                                isOvertime -> RoseDestructiveBorder
-                                isNearDusk -> AmberWarningBorder
-                                else -> BorderSubtle
-                            }
+                // Dòng 2: Tên địa điểm + Danh mục/Cao độ (Chạm để bung chi tiết)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { isDetailsExpanded = !isDetailsExpanded },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = place.name,
+                            style = MaterialTheme.typography.titleSmall.copy(
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 15.5.sp,
+                                letterSpacing = (-0.2).sp,
+                                textDecoration = if (place.isVisited || isSkipped) {
+                                    androidx.compose.ui.text.style.TextDecoration.LineThrough
+                                } else null
+                            ),
+                            color = if (place.isVisited || isSkipped) TextMuted else TextPrimary
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "${place.category.label}  •  Cao độ ${place.altitudeMeters}m",
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp),
+                            color = TextMuted
+                        )
+                    }
+                    val detailsChevronRot by animateFloatAsState(
+                        targetValue = if (isDetailsExpanded) 180f else 0f,
+                        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+                        label = "PlaceChevronRot"
+                    )
+                    Icon(
+                        imageVector = Icons.Default.KeyboardArrowDown,
+                        contentDescription = "Chi tiết",
+                        tint = TextSubtle,
+                        modifier = Modifier
+                            .size(18.dp)
+                            .graphicsLayer { rotationZ = detailsChevronRot }
+                    )
+                }
 
+                // Dòng 3: Mẹo thực chiến gọn 2 dòng
+                val bodySummary = place.practicalTip.ifBlank { place.addressHint }
+                if (bodySummary.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = bodySummary,
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                        color = TextSecondary,
+                        maxLines = if (isDetailsExpanded) 8 else 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.clickable { isDetailsExpanded = !isDetailsExpanded }
+                    )
+                }
+
+                // Khối mở rộng mượt: Địa chỉ + Giờ vàng + Chỉnh thời lượng dừng [-10p] [+10p] + Đếm giờ + Bỏ qua
+                AnimatedVisibility(
+                    visible = isDetailsExpanded && !isSkipped,
+                    enter = ApplePanelExpand,
+                    exit = ApplePanelCollapse
+                ) {
+                    Column(
+                        modifier = Modifier.padding(top = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        HorizontalDivider(color = BorderHairline)
+
+                        if (place.addressHint.isNotBlank() && place.addressHint != bodySummary) {
+                            Text(
+                                text = place.addressHint,
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                                color = TextPrimary
+                            )
+                        }
+
+                        if (goldenHour != null) {
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(11.dp))
-                                    .background(boxBg)
-                                    .border(BorderStroke(1.dp, boxBorder), RoundedCornerShape(11.dp))
-                                    .padding(horizontal = 10.dp, vertical = 8.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "🕒 Đến $arrivalStr • Ở ${scheduledNode.stayDurationMin}p ➔ Đi lúc $departStr",
-                                        style = TelemetryTextStyle.copy(fontSize = 11.5.sp),
-                                        color = if (isOvertime) RoseDestructiveText else TextPrimary
-                                    )
-                                    if (isOvertime) {
-                                        Text(
-                                            text = "⚠ Sau 17:15",
-                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 10.sp),
-                                            color = RoseDestructiveText
-                                        )
-                                    }
-                                }
-
-                                // Cụm nút chỉnh nhanh thời gian dừng [-10p] [+10p] + Bấm giờ dừng + Bỏ qua
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Row(
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        if (onAdjustStayMin != null) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .clip(RoundedCornerShape(6.dp))
-                                                    .background(SurfaceWhite)
-                                                    .border(BorderStroke(1.dp, BorderSubtle), RoundedCornerShape(6.dp))
-                                                    .springClickable { onAdjustStayMin(-10) }
-                                                    .padding(horizontal = 7.dp, vertical = 3.dp)
-                                            ) {
-                                                Text("-10p", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
-                                            }
-                                            Box(
-                                                modifier = Modifier
-                                                    .clip(RoundedCornerShape(6.dp))
-                                                    .background(SurfaceWhite)
-                                                    .border(BorderStroke(1.dp, BorderSubtle), RoundedCornerShape(6.dp))
-                                                    .springClickable { onAdjustStayMin(10) }
-                                                    .padding(horizontal = 7.dp, vertical = 3.dp)
-                                            ) {
-                                                Text("+10p", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
-                                            }
-                                        }
-                                    }
-
-                                    Row(
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        if (onStartPitStopTimer != null && !place.isVisited) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .clip(RoundedCornerShape(7.dp))
-                                                    .background(if (isTimerRunningHere) ElectricOrange else ElectricOrangeSoft)
-                                                    .border(BorderStroke(1.dp, ElectricOrangeBorder), RoundedCornerShape(7.dp))
-                                                    .springClickable(onClick = onStartPitStopTimer)
-                                                    .padding(horizontal = 8.dp, vertical = 3.5.dp)
-                                            ) {
-                                                Text(
-                                                    text = if (isTimerRunningHere) "⏱️ Đang đếm..." else "⏱️ Bấm giờ dừng",
-                                                    fontSize = 10.5.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = if (isTimerRunningHere) Color.White else ElectricOrangeHover
-                                                )
-                                            }
-                                        }
-
-                                        if (onToggleSkipToday != null && !place.isVisited) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .clip(RoundedCornerShape(7.dp))
-                                                    .background(SurfaceWhite)
-                                                    .border(BorderStroke(1.dp, BorderSubtle), RoundedCornerShape(7.dp))
-                                                    .springClickable(onClick = onToggleSkipToday)
-                                                    .padding(horizontal = 7.dp, vertical = 3.5.dp)
-                                            ) {
-                                                Text(
-                                                    text = "Bỏ qua",
-                                                    fontSize = 10.sp,
-                                                    fontWeight = FontWeight.Medium,
-                                                    color = TextMuted
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // Khung Giờ Vàng & Góc Chụp (chỉ hiển thị gọn trên điểm cảnh đẹp chưa đi)
-                    if (goldenHour != null) {
-                        val isOptimal = goldenHour.match == GoldenHourMatch.OPTIMAL
-                        val ghBg = if (isOptimal) EmeraldGreenSoft else AmberWarningSoft
-                        val ghBorder = if (isOptimal) EmeraldGreenBorder else AmberWarningBorder
-                        val ghText = if (isOptimal) EmeraldGreenText else AmberWarningText
-
-                        Spacer(modifier = Modifier.height(7.dp))
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(ghBg)
-                                .border(BorderStroke(1.dp, ghBorder), RoundedCornerShape(10.dp))
-                                .clickable { showPhotoTip = !showPhotoTip }
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(if (goldenHour.match == GoldenHourMatch.OPTIMAL) EmeraldGreenSoft else AmberWarningSoft)
+                                    .padding(horizontal = 10.dp, vertical = 7.dp),
+                                verticalArrangement = Arrangement.spacedBy(3.dp)
                             ) {
                                 Text(
-                                    text = goldenHour.statusLabel,
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = ghText
+                                    text = "${goldenHour.statusLabel} • ${goldenHour.detailHint}",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                    color = if (goldenHour.match == GoldenHourMatch.OPTIMAL) EmeraldGreenText else AmberWarningText
                                 )
-                                Icon(
-                                    if (showPhotoTip) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                    contentDescription = "Mẹo góc chụp",
-                                    tint = ghText,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                            if (showPhotoTip) {
                                 Text(
-                                    text = "✨ ${goldenHour.detailHint}",
+                                    text = "Góc chụp: ${goldenHour.profile.photoAngleTip}",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = TextPrimary
-                                )
-                                Text(
-                                    text = "📸 Góc chụp: ${goldenHour.profile.photoAngleTip}",
-                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
                                     color = TextSecondary
                                 )
                             }
                         }
-                    }
 
-                    if (place.addressHint.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = "📍 ${place.addressHint}",
-                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                            color = TextPrimary
-                        )
-                    }
-
-                    if (place.practicalTip.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "💡 ${place.practicalTip}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextSecondary
-                        )
-                    }
-
-                    if (customNote.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "🧭 $customNote",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = ElectricOrangeHover
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    if (isEditMode) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 8.dp),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            listOf(
-                                Triple("⬆️ Lên", SurfaceMuted to TextPrimary, onMoveUp),
-                                Triple("⬇️ Xuống", SurfaceMuted to TextPrimary, onMoveDown),
-                                Triple("Chuyển", SkyTelemetrySoft to SkyTelemetry, onMoveDaySlot),
-                                Triple("Xóa", RoseDestructiveSoft to RoseDestructiveText, onRemoveFromDay)
-                            ).forEach { (label, colorsPair, action) ->
-                                val (bg, fg) = colorsPair
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .clip(RoundedCornerShape(9.dp))
-                                        .background(bg)
-                                        .border(BorderStroke(1.dp, BorderSubtle), RoundedCornerShape(9.dp))
-                                        .springClickable { action?.invoke() }
-                                        .padding(vertical = 7.dp),
-                                    contentAlignment = Alignment.Center
+                        if (scheduledNode != null) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(SurfaceMuted)
+                                    .padding(horizontal = 10.dp, vertical = 7.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        text = label,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = fg
+                                        text = "Dừng ${scheduledNode.stayDurationMin}p",
+                                        style = TelemetryTextStyle.copy(fontSize = 11.5.sp),
+                                        color = TextPrimary
                                     )
+                                    if (onAdjustStayMin != null) {
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(SurfaceWhite)
+                                                .springClickable { onAdjustStayMin(-10) }
+                                                .padding(horizontal = 7.dp, vertical = 3.dp)
+                                        ) {
+                                            Text("-10p", fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold, color = TextSecondary)
+                                        }
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(SurfaceWhite)
+                                                .springClickable { onAdjustStayMin(10) }
+                                                .padding(horizontal = 7.dp, vertical = 3.dp)
+                                        ) {
+                                            Text("+10p", fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold, color = TextSecondary)
+                                        }
+                                    }
+                                }
+
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    if (onStartPitStopTimer != null && !place.isVisited) {
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(if (isTimerRunningHere) ElectricOrange else ElectricOrangeSoft)
+                                                .springClickable(onClick = onStartPitStopTimer)
+                                                .padding(horizontal = 7.dp, vertical = 3.dp)
+                                        ) {
+                                            Text(
+                                                text = if (isTimerRunningHere) "Đang đếm" else "Đếm giờ",
+                                                fontSize = 10.5.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = if (isTimerRunningHere) Color.White else ElectricOrangeHover
+                                            )
+                                        }
+                                    }
+                                    if (onToggleSkipToday != null && !place.isVisited) {
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(SurfaceWhite)
+                                                .springClickable(onClick = onToggleSkipToday)
+                                                .padding(horizontal = 7.dp, vertical = 3.dp)
+                                        ) {
+                                            Text("Bỏ qua", fontSize = 10.5.sp, fontWeight = FontWeight.Medium, color = TextMuted)
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
+                }
 
+                Spacer(modifier = Modifier.height(10.dp))
+
+                if (isEditMode) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        ShadcnButton(
-                            onClick = onNavigate,
-                            variant = ShadcnButtonVariant.Primary,
-                            modifier = Modifier.weight(1.3f).height(37.dp),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
-                        ) {
-                            Icon(Icons.Default.Directions, contentDescription = null, modifier = Modifier.size(15.dp))
-                            Spacer(modifier = Modifier.width(5.dp))
-                            Text("Dẫn đường", fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1)
+                        listOf(
+                            Triple("Lên", SurfaceMuted to TextPrimary, onMoveUp),
+                            Triple("Xuống", SurfaceMuted to TextPrimary, onMoveDown),
+                            Triple("Đổi buổi", SkyTelemetrySoft to SkyTelemetry, onMoveDaySlot),
+                            Triple("Xóa", RoseDestructiveSoft to RoseDestructiveText, onRemoveFromDay)
+                        ).forEach { (label, colorsPair, action) ->
+                            val (bg, fg) = colorsPair
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(bg)
+                                    .springClickable { action?.invoke() }
+                                    .padding(vertical = 6.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = label,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = fg
+                                )
+                            }
                         }
+                    }
+                }
 
-                        ShadcnButton(
-                            onClick = onOpenGoogleMaps,
-                            variant = ShadcnButtonVariant.Secondary,
-                            modifier = Modifier.weight(0.7f).height(37.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                // Dòng nút hành động đáy gọn 34dp
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    ShadcnButton(
+                        onClick = onNavigate,
+                        variant = ShadcnButtonVariant.Primary,
+                        modifier = Modifier.weight(1f).height(34.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
+                    ) {
+                        Icon(Icons.Default.Directions, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Chỉ đường", fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1)
+                    }
+
+                    ShadcnButton(
+                        onClick = onOpenGoogleMaps,
+                        variant = ShadcnButtonVariant.Secondary,
+                        modifier = Modifier.width(82.dp).height(34.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                    ) {
+                        Icon(Icons.Default.Map, contentDescription = "Mở Google Maps", tint = SkyTelemetry, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text("G.Maps", fontWeight = FontWeight.Medium, fontSize = 11.5.sp, maxLines = 1)
+                    }
+
+                    if (onQuickSnap != null) {
+                        Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(SurfaceMuted)
+                                .springClickable(onClick = onQuickSnap),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Default.Map, contentDescription = "Mở Google Maps", tint = SkyTelemetry, modifier = Modifier.size(14.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("G.Maps", fontWeight = FontWeight.SemiBold, fontSize = 11.5.sp, maxLines = 1)
+                            Icon(
+                                Icons.Default.PhotoCamera,
+                                contentDescription = "Chụp Watermark",
+                                tint = SkyTelemetry,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+
+                    if (place.phoneNumber.isNotBlank()) {
+                        Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(EmeraldGreenSoft)
+                                .springClickable(onClick = onCall),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.Phone,
+                                contentDescription = "Gọi",
+                                tint = EmeraldGreenText,
+                                modifier = Modifier.size(16.dp)
+                            )
                         }
                     }
                 }
@@ -2149,22 +2120,22 @@ private fun FlexibleItinerarySwitcherCard(
         nightStayVariant == NightStayVariant.LO_LO_CHAI && is4N3D -> Triple(
             SkyTelemetrySoft,
             SkyTelemetry,
-            "✨ Đêm 1 Yên Minh • Đêm 2 ngủ bản Lô Lô Chải săn mây • Ngày 3 về Đồng Văn & Mã Pì Lèng."
+            "Đêm 1 Yên Minh • Đêm 2 ngủ bản Lô Lô Chải săn mây • Ngày 3 về Đồng Văn & Mã Pì Lèng."
         )
         nightStayVariant == NightStayVariant.LO_LO_CHAI -> Triple(
             AmberWarningSoft,
             AmberWarningText,
-            "⚡ Mẹo: Xuất phát ~06:30 & đổ xăng Phố Cáo • Sáng Ngày 2 không lặp đường."
+            "Mẹo: Xuất phát ~06:30 & đổ xăng Phố Cáo • Sáng Ngày 2 không lặp đường."
         )
         is4N3D -> Triple(
             EmeraldGreenSoft,
             EmeraldGreenText,
-            "✓ Đêm 1 Yên Minh • Đêm 2 Phố cổ Đồng Văn • Đêm 3 Du Già thong thả."
+            "Đêm 1 Yên Minh • Đêm 2 Phố cổ Đồng Văn • Đêm 3 Du Già thong thả."
         )
         else -> Triple(
             EmeraldGreenSoft,
             EmeraldGreenText,
-            "✓ Dễ về kịp trước 17:15 • Tối dạo phố cổ, sáng Ngày 2 lên Cột cờ Lũng Cú."
+            "Dễ về kịp trước 17:15 • Tối dạo phố cổ, sáng Ngày 2 lên Cột cờ Lũng Cú."
         )
     }
 
@@ -2172,7 +2143,7 @@ private fun FlexibleItinerarySwitcherCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
         backgroundColor = SurfaceWhite,
-        borderColor = BorderSubtle
+        borderColor = BorderHairline
     ) {
         Column(
             modifier = Modifier.padding(12.dp),
@@ -2188,18 +2159,9 @@ private fun FlexibleItinerarySwitcherCard(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.weight(1f)
                 ) {
-                    Icon(
-                        Icons.Default.SwapHoriz,
-                        contentDescription = null,
-                        tint = ElectricOrange,
-                        modifier = Modifier.size(16.dp)
-                    )
                     Text(
-                        text = "LỘ TRÌNH LINH HOẠT",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = 0.4.sp
-                        ),
+                        text = "Chọn lộ trình",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
                         color = TextPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -2228,7 +2190,7 @@ private fun FlexibleItinerarySwitcherCard(
                             Text(
                                 text = label,
                                 fontSize = 10.5.sp,
-                                fontWeight = FontWeight.Bold,
+                                fontWeight = FontWeight.SemiBold,
                                 color = if (selected) Color.White else TextSecondary
                             )
                         }
@@ -2239,26 +2201,18 @@ private fun FlexibleItinerarySwitcherCard(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(11.dp))
                     .background(SurfaceMuted)
                     .padding(3.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 NightStayVariant.entries.forEach { variant ->
                     val selected = nightStayVariant == variant
-                    val icon = if (variant == NightStayVariant.LO_LO_CHAI) "🏡" else "🏮"
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .clip(RoundedCornerShape(10.dp))
+                            .clip(RoundedCornerShape(9.dp))
                             .background(if (selected) SurfaceWhite else Color.Transparent)
-                            .then(
-                                if (selected) {
-                                    Modifier.border(BorderStroke(1.dp, ElectricOrangeBorder), RoundedCornerShape(10.dp))
-                                } else {
-                                    Modifier
-                                }
-                            )
                             .springClickable { onSelectNightStay(variant) }
                             .padding(horizontal = 8.dp, vertical = 7.dp),
                         contentAlignment = Alignment.Center
@@ -2268,9 +2222,9 @@ private fun FlexibleItinerarySwitcherCard(
                             verticalArrangement = Arrangement.spacedBy(1.dp)
                         ) {
                             Text(
-                                text = "$icon Đêm $nightNum: ${variant.shortTitle}",
-                                fontSize = 11.5.sp,
-                                fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
+                                text = "Đêm $nightNum: ${variant.shortTitle}",
+                                fontSize = 12.sp,
+                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                                 color = if (selected) TextPrimary else TextSecondary,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis

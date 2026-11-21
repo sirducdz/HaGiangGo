@@ -29,6 +29,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -87,8 +88,8 @@ fun NotebookScreen(
     var showAddJournalDialog by remember { mutableStateOf(false) }
     var showImportJsonDialog by remember { mutableStateOf(false) }
 
-    val topClearance = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 72.dp
-    val bottomClearance = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 96.dp
+    val topClearance = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 58.dp
+    val bottomClearance = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 92.dp
 
     Column(
         modifier = modifier
@@ -454,192 +455,192 @@ fun ExpenseTabContent(
             ),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // 1. Flighty Budget Bento Card with RollingNumberText & Multi-Segment Bar
+            // 1. Apple Wallet Combined Budget + Category Card
             item {
                 val isOverBudget = totalSpent > tripConfig.totalBudget && tripConfig.totalBudget > 0
                 ShadcnCard(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp),
+                    shape = RoundedCornerShape(20.dp),
                     backgroundColor = SurfaceWhite,
-                    borderColor = if (isOverBudget) RoseDestructiveBorder else BorderSubtle
+                    borderColor = if (isOverBudget) RoseDestructiveBorder else BorderHairline
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.Bottom
-                        ) {
-                            Column {
-                                Text(
-                                    text = "TỔNG ĐÃ CHI TIÊU",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = TextMuted
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                RollingNumberText(
-                                    targetValue = totalSpent.toFloat(),
-                                    useThousandSeparator = true,
-                                    suffix = " đ",
-                                    style = TelemetryTextStyle.copy(fontSize = 24.sp),
-                                    color = if (isOverBudget) RoseDestructiveText else EmeraldGreenText
-                                )
+                    Column {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.Bottom
+                            ) {
+                                Column {
+                                    Text(
+                                        text = "Tổng đã chi tiêu",
+                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                                        color = TextMuted
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    RollingNumberText(
+                                        targetValue = totalSpent.toFloat(),
+                                        useThousandSeparator = true,
+                                        suffix = " đ",
+                                        style = TelemetryTextStyle.copy(fontSize = 24.sp),
+                                        color = if (isOverBudget) RoseDestructiveText else TextPrimary
+                                    )
+                                }
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Text(
+                                        text = "Ngân sách",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = TextMuted
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "${currencyFormatter.format(tripConfig.totalBudget)} đ",
+                                        style = TelemetryTextStyle.copy(fontSize = 14.sp),
+                                        color = TextSecondary
+                                    )
+                                }
                             }
-                            Column(horizontalAlignment = Alignment.End) {
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            val fuelFrac by animateFloatAsState(
+                                targetValue = (groupTotals[ExpenseCategory.FUEL] ?: 0L) / budgetDenominator,
+                                animationSpec = spring(dampingRatio = 0.85f, stiffness = 300f),
+                                label = "FuelSegment"
+                            )
+                            val foodFrac by animateFloatAsState(
+                                targetValue = (groupTotals[ExpenseCategory.FOOD] ?: 0L) / budgetDenominator,
+                                animationSpec = spring(dampingRatio = 0.85f, stiffness = 300f),
+                                label = "FoodSegment"
+                            )
+                            val stayFrac by animateFloatAsState(
+                                targetValue = (groupTotals[ExpenseCategory.STAY] ?: 0L) / budgetDenominator,
+                                animationSpec = spring(dampingRatio = 0.85f, stiffness = 300f),
+                                label = "StaySegment"
+                            )
+                            val ticketFrac by animateFloatAsState(
+                                targetValue = ((groupTotals[ExpenseCategory.TICKET] ?: 0L) + (groupTotals[ExpenseCategory.OTHER] ?: 0L)) / budgetDenominator,
+                                animationSpec = spring(dampingRatio = 0.85f, stiffness = 300f),
+                                label = "TicketSegment"
+                            )
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(8.dp)
+                                    .clip(CircleShape)
+                                    .background(SurfaceMuted),
+                                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                if (fuelFrac > 0.005f) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxHeight()
+                                            .fillMaxWidth(fuelFrac.coerceIn(0.02f, 1f))
+                                            .clip(CircleShape)
+                                            .background(AmberWarning)
+                                    )
+                                }
+                                if (foodFrac > 0.005f) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxHeight()
+                                            .fillMaxWidth((foodFrac / (1f - fuelFrac).coerceAtLeast(0.05f)).coerceIn(0.02f, 1f))
+                                            .clip(CircleShape)
+                                            .background(ElectricOrange)
+                                    )
+                                }
+                                if (stayFrac > 0.005f) {
+                                    val rem = (1f - fuelFrac - foodFrac).coerceAtLeast(0.05f)
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxHeight()
+                                            .fillMaxWidth((stayFrac / rem).coerceIn(0.02f, 1f))
+                                            .clip(CircleShape)
+                                            .background(SkyTelemetry)
+                                    )
+                                }
+                                if (ticketFrac > 0.005f) {
+                                    val rem = (1f - fuelFrac - foodFrac - stayFrac).coerceAtLeast(0.05f)
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxHeight()
+                                            .fillMaxWidth((ticketFrac / rem).coerceIn(0.02f, 1f))
+                                            .clip(CircleShape)
+                                            .background(EmeraldGreen)
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            val remaining = tripConfig.totalBudget - totalSpent
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 Text(
-                                    text = "NGÂN SÁCH DỰ KIẾN",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = TextMuted
+                                    text = if (remaining >= 0) "Còn dư: ${currencyFormatter.format(remaining)} đ"
+                                    else "Vượt ngân sách: ${currencyFormatter.format(-remaining)} đ",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                                    color = if (remaining >= 0) TextSecondary else RoseDestructiveText
                                 )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = "${currencyFormatter.format(tripConfig.totalBudget)} đ",
-                                    style = TelemetryTextStyle.copy(fontSize = 15.sp),
-                                    color = TextPrimary
+                                val pct = if (tripConfig.totalBudget > 0) ((totalSpent * 100f) / tripConfig.totalBudget).roundToInt() else 0
+                                ShadcnBadge(
+                                    text = "$pct% ngân sách",
+                                    variant = if (isOverBudget) ShadcnBadgeVariant.Rose else ShadcnBadgeVariant.Emerald
                                 )
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(14.dp))
+                        HorizontalDivider(color = BorderHairline)
 
-                        // Multi-Segment Animated Stacked Bar
-                        val fuelFrac by animateFloatAsState(
-                            targetValue = (groupTotals[ExpenseCategory.FUEL] ?: 0L) / budgetDenominator,
-                            animationSpec = spring(dampingRatio = 0.85f, stiffness = 300f),
-                            label = "FuelSegment"
-                        )
-                        val foodFrac by animateFloatAsState(
-                            targetValue = (groupTotals[ExpenseCategory.FOOD] ?: 0L) / budgetDenominator,
-                            animationSpec = spring(dampingRatio = 0.85f, stiffness = 300f),
-                            label = "FoodSegment"
-                        )
-                        val stayFrac by animateFloatAsState(
-                            targetValue = (groupTotals[ExpenseCategory.STAY] ?: 0L) / budgetDenominator,
-                            animationSpec = spring(dampingRatio = 0.85f, stiffness = 300f),
-                            label = "StaySegment"
-                        )
-                        val ticketFrac by animateFloatAsState(
-                            targetValue = ((groupTotals[ExpenseCategory.TICKET] ?: 0L) + (groupTotals[ExpenseCategory.OTHER] ?: 0L)) / budgetDenominator,
-                            animationSpec = spring(dampingRatio = 0.85f, stiffness = 300f),
-                            label = "TicketSegment"
-                        )
-
+                        // 4 cột danh mục gọn trong cùng 1 thẻ Apple Wallet
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(10.dp)
-                                .clip(CircleShape)
-                                .background(SurfaceMuted),
-                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                .height(IntrinsicSize.Min)
                         ) {
-                            if (fuelFrac > 0.005f) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxHeight()
-                                        .fillMaxWidth(fuelFrac.coerceIn(0.02f, 1f))
-                                        .clip(CircleShape)
-                                        .background(AmberWarning)
-                                )
-                            }
-                            if (foodFrac > 0.005f) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxHeight()
-                                        .fillMaxWidth((foodFrac / (1f - fuelFrac).coerceAtLeast(0.05f)).coerceIn(0.02f, 1f))
-                                        .clip(CircleShape)
-                                        .background(ElectricOrange)
-                                )
-                            }
-                            if (stayFrac > 0.005f) {
-                                val rem = (1f - fuelFrac - foodFrac).coerceAtLeast(0.05f)
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxHeight()
-                                        .fillMaxWidth((stayFrac / rem).coerceIn(0.02f, 1f))
-                                        .clip(CircleShape)
-                                        .background(SkyTelemetry)
-                                )
-                            }
-                            if (ticketFrac > 0.005f) {
-                                val rem = (1f - fuelFrac - foodFrac - stayFrac).coerceAtLeast(0.05f)
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxHeight()
-                                        .fillMaxWidth((ticketFrac / rem).coerceIn(0.02f, 1f))
-                                        .clip(CircleShape)
-                                        .background(EmeraldGreen)
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        val remaining = tripConfig.totalBudget - totalSpent
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = if (remaining >= 0) "Còn dư: ${currencyFormatter.format(remaining)} đ"
-                                else "Vượt ngân sách: ${currencyFormatter.format(-remaining)} đ",
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                                color = if (remaining >= 0) TextSecondary else RoseDestructiveText
+                            val catSpecs = listOf(
+                                Triple(ExpenseCategory.FUEL, "Xăng xe", AmberWarning),
+                                Triple(ExpenseCategory.FOOD, "Ăn uống", ElectricOrange),
+                                Triple(ExpenseCategory.STAY, "Chỗ nghỉ", SkyTelemetry),
+                                Triple(ExpenseCategory.TICKET, "Vé/Thuyền", EmeraldGreen)
                             )
-                            val pct = if (tripConfig.totalBudget > 0) ((totalSpent * 100f) / tripConfig.totalBudget).roundToInt() else 0
-                            ShadcnBadge(
-                                text = "$pct% NGÂN SÁCH",
-                                variant = if (isOverBudget) ShadcnBadgeVariant.Rose else ShadcnBadgeVariant.Emerald
-                            )
-                        }
-                    }
-                }
-            }
-
-            // 2. Category Breakdown Mini-Bento Row
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    val catSpecs = listOf(
-                        Triple(ExpenseCategory.FUEL, "Xăng xe", AmberWarning),
-                        Triple(ExpenseCategory.FOOD, "Ăn uống", ElectricOrange),
-                        Triple(ExpenseCategory.STAY, "Chỗ nghỉ", SkyTelemetry),
-                        Triple(ExpenseCategory.TICKET, "Vé/Thuyền", EmeraldGreen)
-                    )
-                    catSpecs.forEach { (cat, shortLabel, dotColor) ->
-                        val amount = groupTotals[cat] ?: 0L
-                        ShadcnCard(
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(14.dp),
-                            backgroundColor = SurfaceWhite,
-                            borderColor = BorderSubtle
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(6.dp)
-                                            .clip(CircleShape)
-                                            .background(dotColor)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
+                            catSpecs.forEachIndexed { idx, (cat, shortLabel, dotColor) ->
+                                val amount = groupTotals[cat] ?: 0L
+                                if (idx > 0) {
+                                    VerticalDivider(color = BorderHairline, modifier = Modifier.padding(vertical = 8.dp))
+                                }
+                                Column(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(horizontal = 6.dp, vertical = 10.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(6.dp)
+                                                .clip(CircleShape)
+                                                .background(dotColor)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            shortLabel,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = TextMuted,
+                                            maxLines = 1
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(3.dp))
                                     Text(
-                                        shortLabel,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = TextMuted,
-                                        maxLines = 1
+                                        "${amount / 1000}k",
+                                        style = TelemetryTextStyle.copy(fontSize = 13.5.sp),
+                                        color = TextPrimary
                                     )
                                 }
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    "${amount / 1000}k",
-                                    style = TelemetryTextStyle.copy(fontSize = 14.sp),
-                                    color = TextPrimary
-                                )
                             }
                         }
                     }
@@ -669,9 +670,9 @@ fun ExpenseTabContent(
                                 )
                                 Spacer(modifier = Modifier.width(7.dp))
                                 Text(
-                                    text = if (members.size >= 2) "CHIA TIỀN NHÓM (${members.size} NGƯỜI)"
-                                    else "CHẾ ĐỘ ĐỘC HÀNH (SOLO)",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    text = if (members.size >= 2) "Chia tiền nhóm (${members.size} người)"
+                                    else "Chế độ độc hành (Solo)",
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
                                     color = TextPrimary
                                 )
                             }
@@ -790,10 +791,8 @@ fun ExpenseTabContent(
             }
 
             item {
-                Text(
-                    text = "LỊCH SỬ CHI TIÊU (${expenses.size})",
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                    color = TextMuted,
+                AppleSectionHeader(
+                    title = "Lịch sử chi tiêu (${expenses.size})",
                     modifier = Modifier.padding(top = 4.dp)
                 )
             }
@@ -821,7 +820,7 @@ fun ExpenseTabContent(
                         ExpenseCategory.FOOD -> Triple(Icons.Default.Restaurant, ElectricOrangeHover, ElectricOrangeSoft)
                         ExpenseCategory.STAY -> Triple(Icons.Default.Hotel, SkyTelemetry, SkyTelemetrySoft)
                         ExpenseCategory.TICKET -> Triple(Icons.Default.ConfirmationNumber, EmeraldGreenText, EmeraldGreenSoft)
-                        ExpenseCategory.OTHER -> Triple(Icons.Default.ReceiptLong, TextSecondary, SurfaceMuted)
+                        ExpenseCategory.OTHER -> Triple(Icons.AutoMirrored.Filled.ReceiptLong, TextSecondary, SurfaceMuted)
                     }
                     ShadcnCard(
                         modifier = Modifier
@@ -950,8 +949,8 @@ fun ChecklistTabContent(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                "MỨC ĐỘ SẴN SÀNG LÊN ĐÈO",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                "Mức độ sẵn sàng lên đèo",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
                                 color = EmeraldGreenText
                             )
                             Spacer(modifier = Modifier.height(4.dp))
@@ -1007,88 +1006,84 @@ fun ChecklistTabContent(
             }
 
             grouped.forEach { (groupName, itemsInGroup) ->
-                item(key = "group_$groupName") {
-                    Text(
-                        text = groupName.uppercase(),
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        color = ElectricOrangeHover,
-                        modifier = Modifier.padding(top = 8.dp, start = 2.dp)
-                    )
-                }
-
-                items(itemsInGroup, key = { it.id }) { item ->
-                    val checkScale by animateFloatAsState(
-                        targetValue = if (item.isChecked) 1.12f else 1.0f,
-                        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = 500f),
-                        label = "CheckItemBounce"
-                    )
-                    val cardBg by animateColorAsState(
-                        targetValue = if (item.isChecked) SurfaceMuted.copy(alpha = 0.65f) else SurfaceWhite,
-                        animationSpec = tween(180),
-                        label = "CheckCardBg"
-                    )
-
-                    ShadcnCard(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .animateItem(
-                                fadeInSpec = tween(200),
-                                fadeOutSpec = tween(150),
-                                placementSpec = spring(dampingRatio = 0.82f, stiffness = 380f)
-                            ),
-                        shape = RoundedCornerShape(14.dp),
-                        backgroundColor = cardBg,
-                        borderColor = if (item.isChecked) EmeraldGreenBorder else BorderSubtle,
-                        onClick = { onToggle(item.id) }
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                item(key = "group_card_$groupName") {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        AppleSectionHeader(
+                            title = groupName,
+                            trailingText = "${itemsInGroup.count { it.isChecked }}/${itemsInGroup.size}",
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                        ShadcnCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(18.dp),
+                            backgroundColor = SurfaceWhite,
+                            borderColor = BorderHairline
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(24.dp)
-                                    .graphicsLayer {
-                                        scaleX = checkScale
-                                        scaleY = checkScale
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                itemsInGroup.forEachIndexed { idx, item ->
+                                    if (idx > 0) {
+                                        HorizontalDivider(
+                                            modifier = Modifier.padding(start = 46.dp),
+                                            color = BorderHairline
+                                        )
                                     }
-                                    .clip(CircleShape)
-                                    .background(if (item.isChecked) EmeraldGreen else SurfaceWhite)
-                                    .border(
-                                        BorderStroke(1.5.dp, if (item.isChecked) EmeraldGreen else BorderMedium),
-                                        CircleShape
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (item.isChecked) {
-                                    Icon(
-                                        Icons.Default.Check,
-                                        contentDescription = null,
-                                        tint = Color.White,
-                                        modifier = Modifier.size(15.dp)
+                                    val checkScale by animateFloatAsState(
+                                        targetValue = if (item.isChecked) 1.12f else 1.0f,
+                                        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = 500f),
+                                        label = "CheckItemBounce_${item.id}"
                                     )
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { onToggle(item.id) }
+                                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(22.dp)
+                                                .graphicsLayer {
+                                                    scaleX = checkScale
+                                                    scaleY = checkScale
+                                                }
+                                                .clip(CircleShape)
+                                                .background(if (item.isChecked) EmeraldGreen else SurfaceWhite)
+                                                .border(
+                                                    BorderStroke(1.5.dp, if (item.isChecked) EmeraldGreen else BorderMedium),
+                                                    CircleShape
+                                                ),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            if (item.isChecked) {
+                                                Icon(
+                                                    Icons.Default.Check,
+                                                    contentDescription = null,
+                                                    tint = Color.White,
+                                                    modifier = Modifier.size(14.dp)
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.width(11.dp))
+                                        Text(
+                                            text = item.title,
+                                            style = MaterialTheme.typography.bodyMedium.copy(
+                                                fontWeight = if (item.isChecked) FontWeight.Normal else FontWeight.Medium,
+                                                textDecoration = if (item.isChecked) TextDecoration.LineThrough else null
+                                            ),
+                                            color = if (item.isChecked) TextMuted else TextPrimary,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .size(26.dp)
+                                                .clip(CircleShape)
+                                                .springClickable { onDelete(item.id) },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(Icons.Default.Close, contentDescription = "Xóa", tint = TextSubtle, modifier = Modifier.size(14.dp))
+                                        }
+                                    }
                                 }
-                            }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = item.title,
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    fontWeight = if (item.isChecked) FontWeight.Normal else FontWeight.Medium,
-                                    textDecoration = if (item.isChecked) TextDecoration.LineThrough else null
-                                ),
-                                color = if (item.isChecked) TextMuted else TextPrimary,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .size(28.dp)
-                                    .clip(CircleShape)
-                                    .springClickable { onDelete(item.id) },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Default.Close, contentDescription = "Xóa", tint = TextSubtle, modifier = Modifier.size(15.dp))
                             }
                         }
                     }
@@ -1135,100 +1130,87 @@ fun JournalTabContent(
             ),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            item(key = "journal_quicksnap_banner") {
-                ShadcnCard(
+            item(key = "journal_quick_actions") {
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp),
-                    backgroundColor = SkyTelemetrySoft,
-                    borderColor = SkyTelemetryBorder,
-                    onClick = onQuickSnapClick
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                    ShadcnCard(
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(18.dp),
+                        backgroundColor = SurfaceWhite,
+                        borderColor = BorderHairline,
+                        onClick = onQuickSnapClick
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(SkyTelemetry),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Default.PhotoCamera, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            AppleIconSquircle(
+                                icon = Icons.Default.PhotoCamera,
+                                tint = SkyTelemetry,
+                                backgroundColor = SkyTelemetrySoft,
+                                size = 34.dp,
+                                iconSize = 18.dp
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "CHỤP NHANH GẮN WATERMARK ĐỘ CAO",
-                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Black),
-                                    color = SkyTelemetry
+                                    text = "Chụp Watermark",
+                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                                    color = TextPrimary,
+                                    maxLines = 1
                                 )
                                 Text(
-                                    text = "Tự đóng dấu Tên đèo • Cao độ (m) • Tọa độ GPS",
+                                    text = "Gắn độ cao & GPS",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = TextSecondary
+                                    color = TextMuted,
+                                    maxLines = 1
                                 )
                             }
                         }
-                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = SkyTelemetry)
                     }
-                }
-            }
 
-            item(key = "journal_poster_banner") {
-                ShadcnCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp),
-                    backgroundColor = ElectricOrangeSoft,
-                    borderColor = ElectricOrangeBorder,
-                    onClick = onOpenRecapPoster
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                    ShadcnCard(
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(18.dp),
+                        backgroundColor = SurfaceWhite,
+                        borderColor = BorderHairline,
+                        onClick = onOpenRecapPoster
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(ElectricOrange),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Default.AutoAwesomeMotion, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            AppleIconSquircle(
+                                icon = Icons.Default.AutoAwesomeMotion,
+                                tint = ElectricOrangeHover,
+                                backgroundColor = ElectricOrangeSoft,
+                                size = 34.dp,
+                                iconSize = 18.dp
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "TẠO POSTER TỔNG KẾT CHUYẾN ĐI",
-                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Black),
-                                    color = ElectricOrangeHover
+                                    text = "Poster Hành trình",
+                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                                    color = TextPrimary,
+                                    maxLines = 1
                                 )
                                 Text(
-                                    text = "Bản đồ vòng cung + Cột mốc đã ghé + Đỉnh cao độ",
+                                    text = "Xuất ảnh tổng kết",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = TextSecondary
+                                    color = TextMuted,
+                                    maxLines = 1
                                 )
                             }
                         }
-                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = ElectricOrangeHover)
                     }
                 }
             }
 
             item {
-                Text(
-                    text = "NHẬT KÝ HÀNH TRÌNH (${journal.size} ghi chép)",
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                    color = TextMuted
-                )
+                AppleSectionHeader(title = "Nhật ký hành trình (${journal.size})")
             }
 
             if (journal.isEmpty()) {

@@ -28,6 +28,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -171,6 +173,38 @@ class MainActivity : ComponentActivity() {
                             2 -> NearbyScreen(viewModel = viewModel)
                             3 -> NotebookScreen(viewModel = viewModel)
                         }
+                    }
+
+                    // 1B. Lớp Scrim chuyển sắc mờ mép trên & dưới cho các tab cuộn (chống đè chữ tuyệt đối)
+                    if (!isFullScreenNav && selectedTab != 0) {
+                        val topScrimHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 72.dp
+                        val bottomScrimHeight = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 84.dp
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .fillMaxWidth()
+                                .height(topScrimHeight)
+                                .background(
+                                    Brush.verticalGradient(
+                                        0.0f to AppBackground,
+                                        0.72f to AppBackground.copy(alpha = 0.96f),
+                                        1.0f to Color.Transparent
+                                    )
+                                )
+                        )
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .height(bottomScrimHeight)
+                                .background(
+                                    Brush.verticalGradient(
+                                        0.0f to Color.Transparent,
+                                        0.32f to AppBackground.copy(alpha = 0.94f),
+                                        1.0f to AppBackground
+                                    )
+                                )
+                        )
                     }
 
                     // 2. Cụm Header nổi kiểu Flighty (ẩn mượt khi đang Dẫn đường Full-Screen trên Tab Bản đồ)
