@@ -1,7 +1,13 @@
 package com.reed.hagianggo.domain
 
 import com.reed.hagianggo.model.ItinerarySlot
+import com.reed.hagianggo.model.NightStayVariant
+import com.reed.hagianggo.model.Place
+import com.reed.hagianggo.model.PlaceCategory
 import com.reed.hagianggo.model.TimeSlot
+import com.reed.hagianggo.model.TripDuration
+import com.reed.hagianggo.model.VehicleType
+import kotlin.math.roundToInt
 
 /**
  * Logic thuần Kotlin cho Trình Chỉnh Sửa Lịch Trình Cá Nhân (Custom Itinerary Editor).
@@ -9,6 +15,73 @@ import com.reed.hagianggo.model.TimeSlot
  * tự động tạo buổi trống khi cần và hỗ trợ đẩy lên/xuống vượt ranh giới Sáng/Trưa/Chiều/Tối.
  */
 object ItineraryEditorLogic {
+
+    fun resolvePlanCode(
+        duration: TripDuration,
+        vehicle: VehicleType,
+        variant: NightStayVariant
+    ): String {
+        val suffix = if (variant == NightStayVariant.LO_LO_CHAI) "_LLC" else ""
+        return "${duration.code}_${vehicle.code}$suffix"
+    }
+
+    fun fallbackPlanCode(
+        duration: TripDuration,
+        variant: NightStayVariant
+    ): String {
+        val base = if (duration == TripDuration.DAYS_4_NIGHTS_3) "4N3D" else "3N2D"
+        val suffix = if (variant == NightStayVariant.LO_LO_CHAI) "_LLC" else ""
+        return "${base}_MOTORBIKE$suffix"
+    }
+
+    fun buildDynamicDayRouteSubtitle(places: List<Place>, totalRoadKm: Double): String {
+        if (places.isEmpty()) {
+            return "Chưa có điểm dừng cho ngày này • Bấm + Thêm điểm"
+        }
+
+        val picked: List<Place> = if (places.size <= 5) {
+            places
+        } else {
+            val middle = places.subList(1, places.lastIndex)
+            val scenic = middle.filter {
+                it.category == PlaceCategory.CHECKIN_VIEW || it.category == PlaceCategory.HOMESTAY
+            }
+            val pool = if (scenic.size >= 2) scenic else middle
+            val sampledMiddle = when {
+                pool.size <= 3 -> pool
+                else -> listOf(
+                    pool.first(),
+                    pool[pool.size / 2],
+                    pool.last()
+                )
+            }
+            listOf(places.first()) + sampledMiddle + listOf(places.last())
+        }
+
+        val dedupedLabels = mutableListOf<String>()
+        for (p in picked) {
+            val label = shortPlaceLabel(p.name)
+            if (label.isNotEmpty() && dedupedLabels.lastOrNull() != label) {
+                dedupedLabels.add(label)
+            }
+        }
+        val routeText = dedupedLabels.joinToString(" ➔ ")
+        return if (totalRoadKm >= 1.0) {
+            "$routeText (~${totalRoadKm.roundToInt()}km)"
+        } else {
+            routeText
+        }
+    }
+
+    private fun shortPlaceLabel(rawName: String): String {
+        val trimmed = rawName.trim()
+        val parenIdx = trimmed.indexOf(" (")
+        return if (parenIdx >= 4) {
+            trimmed.substring(0, parenIdx).trim()
+        } else {
+            trimmed
+        }
+    }
 
     private val SLOT_ORDER = listOf(
         TimeSlot.MORNING,

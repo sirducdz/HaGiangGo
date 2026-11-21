@@ -15,6 +15,7 @@ import android.os.Bundle
 import android.os.Looper
 import androidx.core.content.ContextCompat
 import androidx.core.location.LocationManagerCompat
+import com.reed.hagianggo.model.LocationTelemetry
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -27,6 +28,9 @@ class OfflineLocationTracker(private val context: Context) : LocationListener {
     private val _currentLocation = MutableStateFlow<Pair<Double, Double>?>(null)
     val currentLocation: StateFlow<Pair<Double, Double>?> = _currentLocation.asStateFlow()
 
+    private val _locationTelemetry = MutableStateFlow<LocationTelemetry?>(null)
+    val locationTelemetry: StateFlow<LocationTelemetry?> = _locationTelemetry.asStateFlow()
+
     private val _manualOverrideZoneId = MutableStateFlow<String?>(null)
     val manualOverrideZoneId: StateFlow<String?> = _manualOverrideZoneId.asStateFlow()
 
@@ -35,6 +39,15 @@ class OfflineLocationTracker(private val context: Context) : LocationListener {
 
     private var isReceiverRegistered = false
     private var lastKnownEnabledState = false
+    private var isHighFrequencyNavMode = false
+    private var prevLocationForBearing: Pair<Double, Double>? = null
+    private var lastValidBearingDeg = 0f
+
+    fun setHighFrequencyNavigationMode(enabled: Boolean) {
+        if (isHighFrequencyNavMode == enabled) return
+        isHighFrequencyNavMode = enabled
+        syncProvidersAndRequestImmediateFix(forceRebind = true, requestImmediate = enabled)
+    }
 
     // Lắng nghe sự kiện bật/tắt Vị trí ngay lập tức từ thanh trạng thái (Quick Settings)
     private val locationSwitchReceiver = object : BroadcastReceiver() {
@@ -139,13 +152,20 @@ class OfflineLocationTracker(private val context: Context) : LocationListener {
                 } catch (_: Exception) {}
 
                 val available = lm.allProviders
+                val fusedMinMs = if (isHighFrequencyNavMode) 1500L else 5000L
+                val fusedMinDistM = if (isHighFrequencyNavMode) 2f else 8f
+                val gpsMinMs = if (isHighFrequencyNavMode) 1500L else 6000L
+                val gpsMinDistM = if (isHighFrequencyNavMode) 2f else 10f
+                val netMinMs = if (isHighFrequencyNavMode) 4000L else 8000L
+                val netMinDistM = if (isHighFrequencyNavMode) 8f else 15f
+
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
                     available.contains(LocationManager.FUSED_PROVIDER)
                 ) {
                     lm.requestLocationUpdates(
                         LocationManager.FUSED_PROVIDER,
-                        5000L,
-                        8f,
+                        fusedMinMs,
+                        fusedMinDistM,
                         this,
                         Looper.getMainLooper()
                     )
@@ -153,8 +173,8 @@ class OfflineLocationTracker(private val context: Context) : LocationListener {
                 if (available.contains(LocationManager.GPS_PROVIDER)) {
                     lm.requestLocationUpdates(
                         LocationManager.GPS_PROVIDER,
-                        6000L,
-                        10f,
+                        gpsMinMs,
+                        gpsMinDistM,
                         this,
                         Looper.getMainLooper()
                     )
@@ -162,8 +182,8 @@ class OfflineLocationTracker(private val context: Context) : LocationListener {
                 if (available.contains(LocationManager.NETWORK_PROVIDER)) {
                     lm.requestLocationUpdates(
                         LocationManager.NETWORK_PROVIDER,
-                        8000L,
-                        15f,
+                        netMinMs,
+                        netMinDistM,
                         this,
                         Looper.getMainLooper()
                     )
@@ -174,7 +194,7 @@ class OfflineLocationTracker(private val context: Context) : LocationListener {
                 // 1. Lấy ngay tọa độ cache mới nhất (nếu có) để hiển thị tức thì < 50ms
                 val bestCached = getBestLastKnownLocation(lm)
                 if (bestCached != null) {
-                    _currentLocation.value = Pair(bestCached.latitude, bestCached.longitude)
+                    publishLocation(bestCached)
                 }
 
                 // 2. Chủ động ép lấy 1 điểm GPS/Fused mới ngay lập tức (kể cả khi đang đứng yên 0m)
@@ -237,7 +257,7 @@ class OfflineLocationTracker(private val context: Context) : LocationListener {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                     lm.getCurrentLocation(provider, null, mainExecutor) { location ->
                         if (location != null) {
-                            _currentLocation.value = Pair(location.latitude, location.longitude)
+                            publishLocation(location)
                             _isGpsEnabled.value = true
                         }
                     }
@@ -265,8 +285,46 @@ class OfflineLocationTracker(private val context: Context) : LocationListener {
         _manualOverrideZoneId.value = zoneId
     }
 
+    private fun publishLocation(location: Location) {
+        val lat = location.latitude
+        val lng = location.longitude
+        _currentLocation.value = Pair(lat, lng)
+
+        val speedKmh = if (location.hasSpeed()) (location.speed * 3.6f).coerceAtLeast(0f) else 0f
+        val prev = prevLocationForBearing
+        val movedMeters = if (prev != null) {
+            LocationMath.calculateDistanceKm(prev.first, prev.second, lat, lng) * 1000.0
+        } else {
+            0.0
+        }
+
+        val hasHardwareBearing = location.hasBearing() && (speedKmh >= 3.0f || location.bearing != 0f)
+        val computedBearing = when {
+            hasHardwareBearing -> ((location.bearing % 360f) + 360f) % 360f
+            prev != null && movedMeters >= 5.0 -> LocationMath.calculateBearingDeg(prev.first, prev.second, lat, lng)
+            else -> lastValidBearingDeg
+        }
+        if (hasHardwareBearing || movedMeters >= 5.0) {
+            lastValidBearingDeg = computedBearing
+            prevLocationForBearing = Pair(lat, lng)
+        } else if (prev == null) {
+            prevLocationForBearing = Pair(lat, lng)
+        }
+
+        _locationTelemetry.value = LocationTelemetry(
+            lat = lat,
+            lng = lng,
+            altitudeM = if (location.hasAltitude()) location.altitude else 0.0,
+            speedKmh = speedKmh,
+            bearingDeg = computedBearing,
+            hasBearing = hasHardwareBearing || movedMeters >= 5.0,
+            accuracyM = if (location.hasAccuracy()) location.accuracy else 0f,
+            timestampMs = System.currentTimeMillis()
+        )
+    }
+
     override fun onLocationChanged(location: Location) {
-        _currentLocation.value = Pair(location.latitude, location.longitude)
+        publishLocation(location)
         _isGpsEnabled.value = true
     }
 

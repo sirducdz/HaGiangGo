@@ -67,10 +67,15 @@ fun TripScreen(
     val config by viewModel.tripConfig.collectAsState()
     val expenses by viewModel.expenses.collectAsState()
     val currentLocation by viewModel.currentLocation.collectAsState()
+    val locationTelemetry by viewModel.locationTelemetry.collectAsState()
     val isGpsEnabled by viewModel.isGpsEnabled.collectAsState()
+    val isOutsideHaGiang by viewModel.isOutsideHaGiang.collectAsState()
     val liveRideState by viewModel.liveRideState.collectAsState()
+    val fuelAdvisory by viewModel.fuelAdvisory.collectAsState()
     val offlineMapStatus by viewModel.offlineMapStatus.collectAsState()
     val preferredMapLayer by viewModel.preferredMapLayer.collectAsState()
+    val activeNavigation by viewModel.activeNavigation.collectAsState()
+    val navMapPreference by viewModel.navMapPreference.collectAsState()
 
     var selectedZoneId by remember { mutableStateOf<String?>(null) }
     var focusedPlace by remember { mutableStateOf<Place?>(null) }
@@ -78,6 +83,14 @@ fun TripScreen(
     var showRealMap by remember { mutableStateOf(true) }
     var sheetDetent by remember { mutableStateOf(MapSheetDetent.HALF) }
     var dragOffsetPx by remember { mutableFloatStateOf(0f) }
+    var overviewRouteTriggerSeq by remember { mutableIntStateOf(0) }
+    var recenterTriggerSeq by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(activeNavigation != null) {
+        if (activeNavigation != null) {
+            showRealMap = true
+        }
+    }
 
     val totalSpent = remember(expenses) { expenses.sumOf { it.amount } }
 
@@ -146,6 +159,12 @@ fun TripScreen(
                 onOpenSos = { viewModel.openSosSheet() },
                 preferredLayerStyle = preferredMapLayer,
                 onLayerStyleChanged = { viewModel.setPreferredMapLayer(it) },
+                activeNavigation = activeNavigation,
+                currentBearingDeg = locationTelemetry?.bearingDeg ?: 0f,
+                overviewRouteTriggerSeq = overviewRouteTriggerSeq,
+                recenterTriggerSeq = recenterTriggerSeq,
+                onStartInAppNav = { place -> viewModel.requestNavigationTo(place) },
+                onUserPanMap = { viewModel.setNavFreePan() },
                 modifier = Modifier.fillMaxSize()
             )
         } else {
@@ -182,8 +201,9 @@ fun TripScreen(
         }
 
         // =====================================================================
-        // 2. TẤM KÉO TRƯỢT 3 NẤC VẬT LÝ LÒ XO (3-DETENT FLUID SHEET)
+        // 2. TẤM KÉO TRƯỢT 3 NẤC VẬT LÝ LÒ XO (ẩn khi đang Dẫn đường trong app)
         // =====================================================================
+        if (activeNavigation == null) {
         Surface(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -578,6 +598,53 @@ fun TripScreen(
                         }
                     }
 
+                    // Tùy chọn mặc định khi bấm Dẫn đường: Trong app / Hỏi mỗi lần / Google Maps
+                    item(key = "nav_preference_strip") {
+                        ShadcnCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            backgroundColor = SurfaceWhite,
+                            borderColor = BorderSubtle,
+                            shadowElevation = 0.dp
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(10.dp),
+                                verticalArrangement = Arrangement.spacedBy(7.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "BẢN ĐỒ DẪN ĐƯỜNG MẶC ĐỊNH",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = TextMuted
+                                    )
+                                    Text(
+                                        text = navMapPreference.shortLabel,
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = ElectricOrangeHover
+                                    )
+                                }
+                                ShadcnSegmentedTabs(
+                                    items = NavigationMapPreference.entries,
+                                    selectedItem = navMapPreference,
+                                    onItemSelected = { viewModel.setNavMapPreference(it) },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) { pref, isSelected ->
+                                    Text(
+                                        text = pref.shortLabel,
+                                        color = if (isSelected) TextPrimary else TextMuted,
+                                        fontSize = 11.5.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     // Tiêu đề danh sách
                     item(key = "list_header") {
                         Row(
@@ -628,6 +695,9 @@ fun TripScreen(
                                     }
                                 },
                                 onNavigate = {
+                                    viewModel.requestNavigationTo(place)
+                                },
+                                onOpenGoogleMaps = {
                                     LocationMath.openNavigationIntent(context, place.latitude, place.longitude, place.name)
                                 },
                                 onCall = {
@@ -645,6 +715,70 @@ fun TripScreen(
                     }
                 }
             }
+        }
+        }
+
+        // =====================================================================
+        // 3. LỚP PHỦ DẪN ĐƯỜNG TRỰC TIẾP TRONG APP (TURN-BY-TURN HUD)
+        // =====================================================================
+        activeNavigation?.let { navState ->
+            val currentLayer = preferredMapLayer
+                ?: if (!com.reed.hagianggo.domain.OfflineMapManager.hasValidatedInternet(context) &&
+                    offlineMapStatus.isReadyOffline
+                ) {
+                    MapLayerStyle.OFFLINE_TOPO
+                } else {
+                    MapLayerStyle.STANDARD_OSM
+                }
+            val nextScheduled = remember(navState.destination.id, navState.hasArrived) {
+                if (navState.hasArrived) {
+                    viewModel.findNextUnvisitedScheduledPlace(navState.destination.id)
+                } else {
+                    null
+                }
+            }
+            val displaySpeedKmh = if (liveRideState.isTracking && liveRideState.currentSpeedKmh > 0.5f) {
+                liveRideState.currentSpeedKmh
+            } else {
+                locationTelemetry?.speedKmh ?: 0f
+            }
+
+            NavigationOverlayHud(
+                navState = navState,
+                currentSpeedKmh = displaySpeedKmh,
+                isOutsideHaGiang = isOutsideHaGiang,
+                fuelAdvisory = fuelAdvisory,
+                nextScheduledPlace = nextScheduled,
+                currentLayerStyle = currentLayer,
+                onToggleFollowMode = { viewModel.toggleNavFollowMode() },
+                onRecenter = {
+                    viewModel.recenterNavigation()
+                    recenterTriggerSeq += 1
+                },
+                onOverviewRoute = {
+                    viewModel.setNavFreePan()
+                    overviewRouteTriggerSeq += 1
+                },
+                onToggleVoice = { viewModel.toggleNavVoice() },
+                onToggleOriginMode = { viewModel.toggleNavOriginMode() },
+                onToggleMapLayer = {
+                    val offlineReady = offlineMapStatus.isReadyOffline
+                    val nextStyle = when (currentLayer) {
+                        MapLayerStyle.STANDARD_OSM -> MapLayerStyle.OPEN_TOPO
+                        MapLayerStyle.OPEN_TOPO -> if (offlineReady) MapLayerStyle.OFFLINE_TOPO else MapLayerStyle.STANDARD_OSM
+                        MapLayerStyle.OFFLINE_TOPO -> MapLayerStyle.STANDARD_OSM
+                    }
+                    viewModel.setPreferredMapLayer(nextStyle)
+                },
+                onOpenSos = { viewModel.openSosSheet() },
+                onOpenGoogleMaps = {
+                    val dest = navState.destination
+                    LocationMath.openNavigationIntent(context, dest.lat, dest.lng, dest.name)
+                },
+                onForceReroute = { viewModel.forceRerouteNow() },
+                onNavigateNext = { nextPlace -> viewModel.startInAppNavigation(nextPlace) },
+                onStopNavigation = { viewModel.stopInAppNavigation() }
+            )
         }
     }
 
@@ -747,6 +881,7 @@ fun PlaceRowCard(
     isFocused: Boolean = false,
     onCardClick: (() -> Unit)? = null,
     onNavigate: () -> Unit,
+    onOpenGoogleMaps: () -> Unit = {},
     onCall: () -> Unit,
     onToggleBookmark: () -> Unit,
     onToggleVisited: () -> Unit,
@@ -939,23 +1074,34 @@ fun PlaceRowCard(
                     onClick = onNavigate,
                     variant = ShadcnButtonVariant.Primary,
                     modifier = Modifier.weight(1f).height(38.dp),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                 ) {
                     Icon(Icons.Default.Directions, contentDescription = null, modifier = Modifier.size(15.dp))
-                    Spacer(modifier = Modifier.width(5.dp))
-                    Text("Dẫn đường", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Dẫn đường", fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1)
+                }
+
+                ShadcnButton(
+                    onClick = onOpenGoogleMaps,
+                    variant = ShadcnButtonVariant.Secondary,
+                    modifier = Modifier.width(86.dp).height(38.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                ) {
+                    Icon(Icons.Default.Map, contentDescription = "Mở Google Maps", modifier = Modifier.size(14.dp), tint = SkyTelemetry)
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text("G.Maps", fontWeight = FontWeight.SemiBold, fontSize = 11.5.sp, maxLines = 1)
                 }
 
                 if (place.phoneNumber.isNotBlank()) {
                     ShadcnButton(
                         onClick = onCall,
                         variant = ShadcnButtonVariant.Secondary,
-                        modifier = Modifier.weight(1f).height(38.dp),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
+                        modifier = Modifier.weight(0.85f).height(38.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                     ) {
                         Icon(Icons.Default.Phone, contentDescription = null, modifier = Modifier.size(15.dp), tint = EmeraldGreen)
-                        Spacer(modifier = Modifier.width(5.dp))
-                        Text("Gọi điện", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Gọi điện", fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1)
                     }
                 }
             }

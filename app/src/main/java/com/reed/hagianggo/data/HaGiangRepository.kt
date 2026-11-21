@@ -1,6 +1,7 @@
 package com.reed.hagianggo.data
 
 import android.content.Context
+import com.reed.hagianggo.domain.ItineraryEditorLogic
 import com.reed.hagianggo.model.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -11,6 +12,7 @@ import kotlinx.coroutines.withContext
 class HaGiangRepository(private val context: Context) {
 
     private val db = HaGiangDatabase.getInstance(context)
+    private val itineraryPrefs = context.getSharedPreferences("hagiang_itinerary_prefs", Context.MODE_PRIVATE)
 
     private val _zones = MutableStateFlow<List<Zone>>(emptyList())
     val zones: StateFlow<List<Zone>> = _zones.asStateFlow()
@@ -29,6 +31,11 @@ class HaGiangRepository(private val context: Context) {
 
     private val _isItineraryCustomized = MutableStateFlow(false)
     val isItineraryCustomized: StateFlow<Boolean> = _isItineraryCustomized.asStateFlow()
+
+    private val _nightStayVariant = MutableStateFlow(
+        NightStayVariant.fromCode(itineraryPrefs.getString("night_stay_variant", null))
+    )
+    val nightStayVariant: StateFlow<NightStayVariant> = _nightStayVariant.asStateFlow()
 
     private val _expenses = MutableStateFlow<List<Expense>>(emptyList())
     val expenses: StateFlow<List<Expense>> = _expenses.asStateFlow()
@@ -53,10 +60,13 @@ class HaGiangRepository(private val context: Context) {
         reloadAll()
     }
 
-    private fun resolvePlanCode(config: TripConfig): String {
-        val exact = "${config.duration.code}_${config.vehicle.code}"
+    private fun resolvePlanCode(
+        config: TripConfig,
+        variant: NightStayVariant = _nightStayVariant.value
+    ): String {
+        val exact = ItineraryEditorLogic.resolvePlanCode(config.duration, config.vehicle, variant)
         if (db.getItinerarySlots(exact).isNotEmpty()) return exact
-        return if (config.duration == TripDuration.DAYS_4_NIGHTS_3) "4N3D_MOTORBIKE" else "3N2D_MOTORBIKE"
+        return ItineraryEditorLogic.fallbackPlanCode(config.duration, variant)
     }
 
     suspend fun reloadAll() = withContext(Dispatchers.IO) {
@@ -80,6 +90,15 @@ class HaGiangRepository(private val context: Context) {
         db.updateTripConfig(config)
         _tripConfig.value = config
         val resolvedCode = resolvePlanCode(config)
+        _activePlanCode.value = resolvedCode
+        _itinerarySlots.value = db.getItinerarySlots(resolvedCode)
+        _isItineraryCustomized.value = db.isPlanCustomized(resolvedCode)
+    }
+
+    suspend fun setNightStayVariant(variant: NightStayVariant) = withContext(Dispatchers.IO) {
+        itineraryPrefs.edit().putString("night_stay_variant", variant.code).apply()
+        _nightStayVariant.value = variant
+        val resolvedCode = resolvePlanCode(_tripConfig.value, variant)
         _activePlanCode.value = resolvedCode
         _itinerarySlots.value = db.getItinerarySlots(resolvedCode)
         _isItineraryCustomized.value = db.isPlanCustomized(resolvedCode)

@@ -1,6 +1,7 @@
 package com.reed.hagianggo.ui
 
 import android.app.Application
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.reed.hagianggo.data.HaGiangDatabase
@@ -9,9 +10,12 @@ import com.reed.hagianggo.data.JsonBackupManager
 import com.reed.hagianggo.domain.AutoCheckInCoordinator
 import com.reed.hagianggo.domain.AutoCheckInEvent
 import com.reed.hagianggo.domain.FuelRangeGuard
+import com.reed.hagianggo.domain.HybridRouteEngine
 import com.reed.hagianggo.domain.ItineraryEditorLogic
 import com.reed.hagianggo.domain.LocationMath
 import com.reed.hagianggo.domain.MountainWeatherManager
+import com.reed.hagianggo.domain.NavigationProgressTracker
+import com.reed.hagianggo.domain.NavigationVoiceCoach
 import com.reed.hagianggo.domain.OfflineLocationTracker
 import com.reed.hagianggo.domain.OfflineMapManager
 import com.reed.hagianggo.domain.PacerNotificationHelper
@@ -22,6 +26,7 @@ import com.reed.hagianggo.model.*
 import com.reed.hagianggo.service.RideTrackerService
 import com.reed.hagianggo.ui.components.MapLayerStyle
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.isActive
@@ -42,6 +47,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val itinerarySlots = repository.itinerarySlots
     val activePlanCode = repository.activePlanCode
     val isItineraryCustomized = repository.isItineraryCustomized
+    val nightStayVariant = repository.nightStayVariant
     val expenses = repository.expenses
     val journal = repository.journal
     val checklist = repository.checklist
@@ -54,7 +60,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val isWeatherSyncing = weatherManager.isSyncing
 
     val currentLocation = locationTracker.currentLocation
+    val locationTelemetry = locationTracker.locationTelemetry
     val isGpsEnabled = locationTracker.isGpsEnabled
+
+    private val hybridRouteEngine = HybridRouteEngine(application)
+    private val navigationVoiceCoach = NavigationVoiceCoach(application)
+    private val navPrefs = application.getSharedPreferences("hagiang_nav_prefs", Context.MODE_PRIVATE)
+
+    private val _navMapPreference = MutableStateFlow(
+        NavigationMapPreference.fromCode(navPrefs.getString("nav_map_preference", null))
+    )
+    val navMapPreference: StateFlow<NavigationMapPreference> = _navMapPreference.asStateFlow()
+
+    private val _pendingNavChoicePlace = MutableStateFlow<Place?>(null)
+    val pendingNavChoicePlace: StateFlow<Place?> = _pendingNavChoicePlace.asStateFlow()
+
+    private val _activeNavigation = MutableStateFlow<ActiveNavigationState?>(null)
+    val activeNavigation: StateFlow<ActiveNavigationState?> = _activeNavigation.asStateFlow()
+
+    private var navigationRouteJob: Job? = null
+    private var consecutiveOffRouteTicks = 0
+    private var consecutiveWrongWayTicks = 0
+    private var lastRerouteTimestampMs = 0L
 
     private val _selectedTab = MutableStateFlow(1) // Mặc định mở tab "Hôm nay" (1)
     val selectedTab: StateFlow<Int> = _selectedTab.asStateFlow()
@@ -315,10 +342,99 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+        // 3. Theo dõi tiến trình Dẫn đường trực tiếp (Cự ly thực, ETA, Bước rẽ, Lệch tuyến, Đi ngược chiều & Giọng nói)
+        viewModelScope.launch {
+            locationTelemetry.filterNotNull().collect { telemetry ->
+                val curNav = _activeNavigation.value ?: return@collect
+                val route = curNav.route ?: return@collect
+                if (curNav.isUsingZonePreviewOrigin) return@collect
+
+                val ride = RideTrackerService.liveRideState.value
+                val altM = if (ride.isTracking && ride.currentAltitude > 10) {
+                    ride.currentAltitude.toInt()
+                } else {
+                    telemetry.altitudeM.toInt().takeIf { it > 10 }
+                        ?: activeZone.value?.elevationMeters
+                        ?: 120
+                }
+                val liveSpeedKmh = if (ride.isTracking && ride.currentSpeedKmh > 0.5f) {
+                    ride.currentSpeedKmh
+                } else {
+                    telemetry.speedKmh
+                }
+
+                val progress = NavigationProgressTracker.evaluateProgress(
+                    route = route,
+                    lat = telemetry.lat,
+                    lng = telemetry.lng,
+                    currentAltitudeM = altM,
+                    vehicle = tripConfig.value.vehicle,
+                    riderPaceFactor = riderPaceFactor.value,
+                    currentClockMinutesOfDay = _liveClockMinutes.value,
+                    previousMatchedIndex = curNav.matchedSegmentIndex,
+                    previousStepIndex = curNav.currentStepIndex,
+                    riderBearingDeg = telemetry.bearingDeg,
+                    hasRiderBearing = telemetry.hasBearing,
+                    riderSpeedKmh = liveSpeedKmh,
+                    bestMinRemainingMeters = curNav.bestMinRemainingMeters,
+                    previousRemainingMeters = curNav.remainingDistanceMeters,
+                    wasGoingWrongWay = curNav.isGoingWrongWay
+                )
+
+                val updatedNav = curNav.copy(
+                    matchedSegmentIndex = progress.matchedSegmentIndex,
+                    remainingDistanceMeters = progress.remainingDistanceMeters,
+                    remainingDurationMin = progress.remainingDurationMin,
+                    etaMinutesOfDay = progress.etaMinutesOfDay,
+                    currentStepIndex = progress.currentStepIndex,
+                    distanceToNextManeuverMeters = progress.distanceToNextManeuverMeters,
+                    offRouteDistanceMeters = progress.offRouteDistanceMeters,
+                    isOffRoute = progress.isOffRoute,
+                    isGoingWrongWay = progress.isGoingWrongWay,
+                    wrongWayBacktrackMeters = progress.wrongWayBacktrackMeters,
+                    bestMinRemainingMeters = progress.bestMinRemainingMeters,
+                    hasArrived = progress.hasArrived,
+                    elevationDeltaMeters = progress.elevationDeltaMeters
+                )
+                _activeNavigation.value = updatedNav
+                navigationVoiceCoach.onProgressUpdate(updatedNav)
+
+                if (!curNav.hasArrived && updatedNav.hasArrived) {
+                    showNotification("🎉 Bạn đã đến ${updatedNav.destination.name}!")
+                }
+
+                val nowMs = System.currentTimeMillis()
+                if (progress.isOffRoute && !curNav.isRerouting && !curNav.isLoadingRoute) {
+                    consecutiveOffRouteTicks++
+                    consecutiveWrongWayTicks = 0
+                    if (consecutiveOffRouteTicks >= 2 && nowMs - lastRerouteTimestampMs >= 20_000L) {
+                        consecutiveOffRouteTicks = 0
+                        lastRerouteTimestampMs = nowMs
+                        rerouteActiveNavigation(telemetry.lat, telemetry.lng)
+                    }
+                } else if (progress.isGoingWrongWay && !curNav.isRerouting && !curNav.isLoadingRoute) {
+                    consecutiveOffRouteTicks = 0
+                    consecutiveWrongWayTicks++
+                    if ((consecutiveWrongWayTicks >= 3 || progress.wrongWayBacktrackMeters >= 180.0) &&
+                        nowMs - lastRerouteTimestampMs >= 20_000L
+                    ) {
+                        consecutiveWrongWayTicks = 0
+                        lastRerouteTimestampMs = nowMs
+                        rerouteActiveNavigation(telemetry.lat, telemetry.lng)
+                    }
+                } else {
+                    consecutiveOffRouteTicks = 0
+                    consecutiveWrongWayTicks = 0
+                }
+            }
+        }
     }
 
     override fun onCleared() {
         super.onCleared()
+        navigationRouteJob?.cancel()
+        navigationVoiceCoach.shutdown()
+        locationTracker.setHighFrequencyNavigationMode(false)
         locationTracker.stopListening()
     }
 
@@ -431,7 +547,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun updateTripConfig(config: TripConfig) {
         viewModelScope.launch {
             val prevVehicle = tripConfig.value.vehicle
+            val prevDuration = tripConfig.value.duration
             repository.updateTripConfig(config)
+            if (prevDuration != config.duration) {
+                _skippedTodayPlaceIds.value = emptySet()
+                AutoCheckInCoordinator.updateSkippedPlaceIds(emptySet())
+            }
             if (prevVehicle != config.vehicle) {
                 val newMax = FuelRangeGuard.defaultMaxRangeForVehicle(config.vehicle)
                 val curFuel = fuelState.value
@@ -984,6 +1105,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setNightStayVariant(variant: NightStayVariant) {
+        if (variant == nightStayVariant.value) return
+        viewModelScope.launch {
+            repository.setNightStayVariant(variant)
+            _skippedTodayPlaceIds.value = emptySet()
+            AutoCheckInCoordinator.updateSkippedPlaceIds(emptySet())
+            val is4N3D = tripConfig.value.duration == TripDuration.DAYS_4_NIGHTS_3
+            val msg = when {
+                variant == NightStayVariant.LO_LO_CHAI && is4N3D ->
+                    "🏡 Đã đổi sang Đêm 2 Lô Lô Chải! Sáng Ngày 3 săn mây Cực Bắc rồi xuống Đồng Văn."
+                variant == NightStayVariant.LO_LO_CHAI ->
+                    "🏡 Đã đổi sang Đêm 1 Lô Lô Chải! Mẹo: Đi từ 06:30 & đổ xăng Phố Cáo trước khi lên Cực Bắc."
+                is4N3D ->
+                    "🏮 Đã đổi sang Đêm 2 Phố cổ Đồng Văn! Tối thong thả dạo phố cổ."
+                else ->
+                    "🏮 Đã đổi sang Đêm 1 Phố cổ Đồng Văn! Lộ trình an toàn trước 17:15."
+            }
+            showNotification(msg)
+        }
+    }
+
     fun openAddCustomPlaceForItinerary(dayNumber: Int, slot: TimeSlot) {
         pendingItineraryTarget = dayNumber to slot
         openAddPlaceDialog()
@@ -1007,6 +1149,300 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun closeQuickSnap() {
         _quickSnapRequest.value = null
+    }
+
+    // ====== In-App Turn-by-Turn & Offline Loop Navigation Controls ======
+
+    fun setNavMapPreference(pref: NavigationMapPreference) {
+        _navMapPreference.value = pref
+        navPrefs.edit().putString("nav_map_preference", pref.code).apply()
+        showNotification("🗺️ Chế độ dẫn đường: ${pref.title}")
+    }
+
+    fun requestNavigationTo(destination: Place) {
+        when (_navMapPreference.value) {
+            NavigationMapPreference.IN_APP -> startInAppNavigation(destination)
+            NavigationMapPreference.GOOGLE_MAPS -> LocationMath.openNavigationIntent(
+                getApplication(),
+                destination.lat,
+                destination.lng,
+                destination.name
+            )
+            NavigationMapPreference.ASK_EVERY_TIME -> {
+                _isWhatNowOpen.value = false
+                _isSosSheetOpen.value = false
+                _isCockpitOpen.value = false
+                _pendingNavChoicePlace.value = destination
+            }
+        }
+    }
+
+    fun dismissNavChoice() {
+        _pendingNavChoicePlace.value = null
+    }
+
+    fun confirmNavChoiceInApp(place: Place, rememberAsDefault: Boolean) {
+        _pendingNavChoicePlace.value = null
+        if (rememberAsDefault) {
+            setNavMapPreference(NavigationMapPreference.IN_APP)
+        }
+        startInAppNavigation(place)
+    }
+
+    fun confirmNavChoiceGoogleMaps(place: Place, rememberAsDefault: Boolean) {
+        _pendingNavChoicePlace.value = null
+        if (rememberAsDefault) {
+            setNavMapPreference(NavigationMapPreference.GOOGLE_MAPS)
+        }
+        LocationMath.openNavigationIntent(
+            getApplication(),
+            place.lat,
+            place.lng,
+            place.name
+        )
+    }
+
+    fun startInAppNavigation(destination: Place, forceFromHaGiangOrigin: Boolean = false) {
+        _isWhatNowOpen.value = false
+        _isSosSheetOpen.value = false
+        _isCockpitOpen.value = false
+        _selectedTab.value = 0
+
+        locationTracker.setHighFrequencyNavigationMode(true)
+        consecutiveOffRouteTicks = 0
+        consecutiveWrongWayTicks = 0
+        lastRerouteTimestampMs = 0L
+
+        val prevVoice = _activeNavigation.value?.isVoiceEnabled ?: false
+        val loc = currentLocation.value
+        val outside = isOutsideHaGiang.value
+        val hasInternet = OfflineMapManager.hasValidatedInternet(getApplication())
+
+        val useZonePreviewOrigin = loc == null || forceFromHaGiangOrigin || (outside && !hasInternet)
+        val previewZone = if (forceFromHaGiangOrigin) {
+            zones.value.firstOrNull { it.id == "tp_ha_giang" } ?: activeZone.value
+        } else {
+            activeZone.value ?: zones.value.firstOrNull()
+        }
+
+        val originLat = if (useZonePreviewOrigin) {
+            previewZone?.centerLat ?: 22.827330
+        } else {
+            loc!!.first
+        }
+        val originLng = if (useZonePreviewOrigin) {
+            previewZone?.centerLng ?: 104.984169
+        } else {
+            loc!!.second
+        }
+        val originLabel = if (useZonePreviewOrigin) {
+            previewZone?.name ?: "TP. Hà Giang (Km0)"
+        } else {
+            "Vị trí của bạn"
+        }
+
+        _activeNavigation.value = ActiveNavigationState(
+            destination = destination,
+            route = null,
+            isLoadingRoute = true,
+            followMode = if (useZonePreviewOrigin) NavCameraFollowMode.FREE_PAN else NavCameraFollowMode.HEADING_UP,
+            isVoiceEnabled = prevVoice,
+            forceFromHaGiangOrigin = forceFromHaGiangOrigin,
+            isUsingZonePreviewOrigin = useZonePreviewOrigin
+        )
+
+        navigationRouteJob?.cancel()
+        navigationRouteJob = viewModelScope.launch {
+            val route = hybridRouteEngine.computeRoute(
+                originLat = originLat,
+                originLng = originLng,
+                destination = destination,
+                vehicle = tripConfig.value.vehicle,
+                originLabel = originLabel,
+                preferOnline = hasInternet
+            )
+            navigationVoiceCoach.resetForRoute(route.computedAtMillis)
+
+            val ride = RideTrackerService.liveRideState.value
+            val altM = if (ride.isTracking && ride.currentAltitude > 10) {
+                ride.currentAltitude.toInt()
+            } else {
+                locationTelemetry.value?.altitudeM?.toInt()?.takeIf { it > 10 }
+                    ?: previewZone?.elevationMeters
+                    ?: 120
+            }
+
+            val initialProgress = NavigationProgressTracker.evaluateProgress(
+                route = route,
+                lat = originLat,
+                lng = originLng,
+                currentAltitudeM = altM,
+                vehicle = tripConfig.value.vehicle,
+                riderPaceFactor = riderPaceFactor.value,
+                currentClockMinutesOfDay = _liveClockMinutes.value,
+                previousMatchedIndex = 0,
+                previousStepIndex = 0
+            )
+
+            val cur = _activeNavigation.value
+            if (cur != null && cur.destination.id == destination.id) {
+                val readyState = cur.copy(
+                    route = route,
+                    isLoadingRoute = false,
+                    isRerouting = false,
+                    matchedSegmentIndex = initialProgress.matchedSegmentIndex,
+                    remainingDistanceMeters = initialProgress.remainingDistanceMeters,
+                    remainingDurationMin = initialProgress.remainingDurationMin,
+                    etaMinutesOfDay = initialProgress.etaMinutesOfDay,
+                    currentStepIndex = initialProgress.currentStepIndex,
+                    distanceToNextManeuverMeters = initialProgress.distanceToNextManeuverMeters,
+                    offRouteDistanceMeters = initialProgress.offRouteDistanceMeters,
+                    isOffRoute = false,
+                    isGoingWrongWay = false,
+                    wrongWayBacktrackMeters = 0.0,
+                    bestMinRemainingMeters = initialProgress.remainingDistanceMeters,
+                    hasArrived = initialProgress.hasArrived,
+                    elevationDeltaMeters = initialProgress.elevationDeltaMeters
+                )
+                _activeNavigation.value = readyState
+                if (readyState.isVoiceEnabled) {
+                    val firstStep = route.steps.getOrNull(readyState.currentStepIndex)?.instructionVi ?: destination.name
+                    navigationVoiceCoach.speakImmediateHint(
+                        "Bắt đầu dẫn đường tới ${destination.name}, $firstStep."
+                    )
+                }
+            }
+        }
+    }
+
+    fun forceRerouteNow() {
+        val cur = _activeNavigation.value ?: return
+        if (cur.isRerouting || cur.isLoadingRoute) return
+        if (cur.isUsingZonePreviewOrigin) {
+            startInAppNavigation(cur.destination, forceFromHaGiangOrigin = cur.forceFromHaGiangOrigin)
+            return
+        }
+        val loc = locationTelemetry.value?.let { it.lat to it.lng } ?: currentLocation.value ?: return
+        consecutiveOffRouteTicks = 0
+        consecutiveWrongWayTicks = 0
+        lastRerouteTimestampMs = System.currentTimeMillis()
+        rerouteActiveNavigation(loc.first, loc.second)
+    }
+
+    private fun rerouteActiveNavigation(currentLat: Double, currentLng: Double) {
+        val cur = _activeNavigation.value ?: return
+        _activeNavigation.value = cur.copy(isRerouting = true)
+        navigationRouteJob?.cancel()
+        navigationRouteJob = viewModelScope.launch {
+            val route = hybridRouteEngine.computeRoute(
+                originLat = currentLat,
+                originLng = currentLng,
+                destination = cur.destination,
+                vehicle = tripConfig.value.vehicle,
+                originLabel = "Vị trí hiện tại",
+                preferOnline = OfflineMapManager.hasValidatedInternet(getApplication())
+            )
+            navigationVoiceCoach.resetForRoute(route.computedAtMillis)
+
+            val latest = _activeNavigation.value ?: return@launch
+            if (latest.destination.id != cur.destination.id) return@launch
+            val altM = locationTelemetry.value?.altitudeM?.toInt()?.takeIf { it > 10 }
+                ?: activeZone.value?.elevationMeters
+                ?: 120
+            val progress = NavigationProgressTracker.evaluateProgress(
+                route = route,
+                lat = currentLat,
+                lng = currentLng,
+                currentAltitudeM = altM,
+                vehicle = tripConfig.value.vehicle,
+                riderPaceFactor = riderPaceFactor.value,
+                currentClockMinutesOfDay = _liveClockMinutes.value
+            )
+            _activeNavigation.value = latest.copy(
+                route = route,
+                isLoadingRoute = false,
+                isRerouting = false,
+                isOffRoute = false,
+                isGoingWrongWay = false,
+                wrongWayBacktrackMeters = 0.0,
+                bestMinRemainingMeters = progress.remainingDistanceMeters,
+                matchedSegmentIndex = progress.matchedSegmentIndex,
+                remainingDistanceMeters = progress.remainingDistanceMeters,
+                remainingDurationMin = progress.remainingDurationMin,
+                etaMinutesOfDay = progress.etaMinutesOfDay,
+                currentStepIndex = progress.currentStepIndex,
+                distanceToNextManeuverMeters = progress.distanceToNextManeuverMeters,
+                offRouteDistanceMeters = progress.offRouteDistanceMeters,
+                hasArrived = progress.hasArrived,
+                elevationDeltaMeters = progress.elevationDeltaMeters
+            )
+        }
+    }
+
+    fun stopInAppNavigation() {
+        navigationRouteJob?.cancel()
+        navigationRouteJob = null
+        consecutiveOffRouteTicks = 0
+        consecutiveWrongWayTicks = 0
+        locationTracker.setHighFrequencyNavigationMode(false)
+        navigationVoiceCoach.stopSpeaking()
+        _activeNavigation.value = null
+    }
+
+    fun toggleNavFollowMode() {
+        val cur = _activeNavigation.value ?: return
+        val next = when (cur.followMode) {
+            NavCameraFollowMode.HEADING_UP -> NavCameraFollowMode.NORTH_UP_FOLLOW
+            NavCameraFollowMode.NORTH_UP_FOLLOW -> NavCameraFollowMode.HEADING_UP
+            NavCameraFollowMode.FREE_PAN -> NavCameraFollowMode.HEADING_UP
+        }
+        _activeNavigation.value = cur.copy(followMode = next)
+    }
+
+    fun setNavFreePan() {
+        val cur = _activeNavigation.value ?: return
+        if (cur.followMode != NavCameraFollowMode.FREE_PAN) {
+            _activeNavigation.value = cur.copy(followMode = NavCameraFollowMode.FREE_PAN)
+        }
+    }
+
+    fun recenterNavigation() {
+        val cur = _activeNavigation.value ?: return
+        _activeNavigation.value = cur.copy(followMode = NavCameraFollowMode.HEADING_UP)
+    }
+
+    fun toggleNavVoice() {
+        val cur = _activeNavigation.value ?: return
+        val next = !cur.isVoiceEnabled
+        navigationVoiceCoach.setEnabled(next)
+        _activeNavigation.value = cur.copy(isVoiceEnabled = next)
+        showNotification(
+            if (next) "🔊 Đã bật đọc hướng rẽ tiếng Việt (Offline)"
+            else "🔇 Đã tắt giọng nói chỉ đường"
+        )
+    }
+
+    fun toggleNavOriginMode() {
+        val cur = _activeNavigation.value ?: return
+        startInAppNavigation(
+            destination = cur.destination,
+            forceFromHaGiangOrigin = !cur.forceFromHaGiangOrigin
+        )
+    }
+
+    fun findNextUnvisitedScheduledPlace(afterPlaceId: String): Place? {
+        val currentDay = tripConfig.value.currentDay
+        val planCode = activePlanCode.value
+        val placesMap = places.value.associateBy { it.id }
+        val orderedPlaces = itinerarySlots.value
+            .filter { it.planCode == planCode && it.dayNumber == currentDay }
+            .sortedBy { it.slot.ordinal }
+            .flatMap { it.suggestedPlaceIds }
+            .mapNotNull { placesMap[it] }
+        if (orderedPlaces.isEmpty()) return null
+        val idx = orderedPlaces.indexOfFirst { it.id == afterPlaceId }
+        val candidates = if (idx >= 0) orderedPlaces.drop(idx + 1) else orderedPlaces
+        return candidates.firstOrNull { !it.isVisited && it.id != afterPlaceId }
     }
 
     private fun showNotification(msg: String) {

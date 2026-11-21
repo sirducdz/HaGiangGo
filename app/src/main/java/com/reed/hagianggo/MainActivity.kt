@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -85,7 +86,14 @@ class MainActivity : ComponentActivity() {
                 val liveRideState by viewModel.liveRideState.collectAsState()
                 val isCockpitOpen by viewModel.isCockpitOpen.collectAsState()
                 val quickSnapRequest by viewModel.quickSnapRequest.collectAsState()
+                val activeNavigation by viewModel.activeNavigation.collectAsState()
+                val pendingNavChoicePlace by viewModel.pendingNavChoicePlace.collectAsState()
                 val notificationMessage by viewModel.notificationMessage.collectAsState()
+                val isFullScreenNav = activeNavigation != null && selectedTab == 0
+
+                BackHandler(enabled = isFullScreenNav) {
+                    viewModel.stopInAppNavigation()
+                }
 
                 var showGlobalZonePicker by remember { mutableStateOf(false) }
                 val snackbarHostState = remember { SnackbarHostState() }
@@ -165,28 +173,34 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    // 2. Cụm Header nổi kiểu Flighty (Trạng thái GPS / Độ cao / Nút AI "Làm gì?")
-                    FlightyFloatingHeader(
-                        activeZoneName = activeZone?.name ?: "TP. Hà Giang",
-                        activeAltitudeMeters = if (liveRideState.isTracking && liveRideState.currentAltitude > 10) {
-                            liveRideState.currentAltitude.toInt()
-                        } else {
-                            activeZone?.elevationMeters ?: 120
-                        },
-                        isGpsLive = isGpsEnabled && currentLocation != null,
-                        isOutsideHaGiang = isOutsideHaGiang,
-                        isTrackingRide = liveRideState.isTracking,
-                        currentSpeedKmh = liveRideState.currentSpeedKmh,
-                        onStatusClick = {
-                            if (liveRideState.isTracking) {
-                                viewModel.openCockpit()
-                            } else {
-                                showGlobalZonePicker = true
-                            }
-                        },
-                        onWhatNowClick = { viewModel.openWhatNow() },
+                    // 2. Cụm Header nổi kiểu Flighty (ẩn mượt khi đang Dẫn đường Full-Screen trên Tab Bản đồ)
+                    AnimatedVisibility(
+                        visible = !isFullScreenNav,
+                        enter = fadeIn(tween(180)) + slideInVertically { -it / 2 },
+                        exit = fadeOut(tween(150)) + slideOutVertically { -it / 2 },
                         modifier = Modifier.align(Alignment.TopCenter)
-                    )
+                    ) {
+                        FlightyFloatingHeader(
+                            activeZoneName = activeZone?.name ?: "TP. Hà Giang",
+                            activeAltitudeMeters = if (liveRideState.isTracking && liveRideState.currentAltitude > 10) {
+                                liveRideState.currentAltitude.toInt()
+                            } else {
+                                activeZone?.elevationMeters ?: 120
+                            },
+                            isGpsLive = isGpsEnabled && currentLocation != null,
+                            isOutsideHaGiang = isOutsideHaGiang,
+                            isTrackingRide = liveRideState.isTracking,
+                            currentSpeedKmh = liveRideState.currentSpeedKmh,
+                            onStatusClick = {
+                                if (liveRideState.isTracking) {
+                                    viewModel.openCockpit()
+                                } else {
+                                    showGlobalZonePicker = true
+                                }
+                            },
+                            onWhatNowClick = { viewModel.openWhatNow() }
+                        )
+                    }
 
                     // 3. Snackbar thông báo nằm gọn ngay trên Thanh viên thuốc đáy
                     SnackbarHost(
@@ -194,15 +208,21 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .navigationBarsPadding()
-                            .padding(bottom = 82.dp, start = 16.dp, end = 16.dp)
+                            .padding(bottom = if (isFullScreenNav) 210.dp else 82.dp, start = 16.dp, end = 16.dp)
                     )
 
-                    // 4. Thanh điều hướng viên thuốc nổi (Floating Pill Nav Bar)
-                    FloatingPillNavBar(
-                        selectedTab = selectedTab,
-                        onTabSelected = { viewModel.selectTab(it) },
+                    // 4. Thanh điều hướng viên thuốc nổi (ẩn mượt khi đang Dẫn đường Full-Screen)
+                    AnimatedVisibility(
+                        visible = !isFullScreenNav,
+                        enter = fadeIn(tween(180)) + slideInVertically { it / 2 },
+                        exit = fadeOut(tween(150)) + slideOutVertically { it / 2 },
                         modifier = Modifier.align(Alignment.BottomCenter)
-                    )
+                    ) {
+                        FloatingPillNavBar(
+                            selectedTab = selectedTab,
+                            onTabSelected = { viewModel.selectTab(it) }
+                        )
+                    }
                 }
 
                 // Modal Đổi cụm chặng nhanh từ Header Pill
@@ -269,6 +289,7 @@ class MainActivity : ComponentActivity() {
                         onRefreshAlternative = { viewModel.refreshWhatNowAlternative() },
                         onToggleBookmark = { id -> viewModel.toggleBookmark(id) },
                         onToggleVisited = { id -> viewModel.toggleVisited(id) },
+                        onNavigateInApp = { place -> viewModel.requestNavigationTo(place) },
                         onDismiss = { viewModel.closeWhatNow() }
                     )
                 }
@@ -296,6 +317,7 @@ class MainActivity : ComponentActivity() {
                             viewModel.closeCockpit()
                             viewModel.openSosSheet()
                         },
+                        onNavigateInApp = { place -> viewModel.requestNavigationTo(place) },
                         onPause = { viewModel.pauseRide() },
                         onResume = { viewModel.resumeRide() },
                         onStop = { viewModel.stopRide() },
@@ -319,7 +341,22 @@ class MainActivity : ComponentActivity() {
                         emergencyPhone = fuelState.emergencyContactPhone,
                         onSaveEmergencyPhone = { phone -> viewModel.saveEmergencyPhone(phone) },
                         onNotify = { msg -> viewModel.notifyMessage(msg) },
+                        onNavigateInApp = { place -> viewModel.requestNavigationTo(place) },
                         onDismiss = { viewModel.closeSosSheet() }
+                    )
+                }
+
+                // Bottom Sheet: Hỏi lựa chọn Bản đồ trong app hoặc Google Maps (khi chọn "Hỏi mỗi lần")
+                pendingNavChoicePlace?.let { destPlace ->
+                    NavigationChoiceSheet(
+                        place = destPlace,
+                        onChooseInApp = { rememberDefault ->
+                            viewModel.confirmNavChoiceInApp(destPlace, rememberDefault)
+                        },
+                        onChooseGoogleMaps = { rememberDefault ->
+                            viewModel.confirmNavChoiceGoogleMaps(destPlace, rememberDefault)
+                        },
+                        onDismiss = { viewModel.dismissNavChoice() }
                     )
                 }
 

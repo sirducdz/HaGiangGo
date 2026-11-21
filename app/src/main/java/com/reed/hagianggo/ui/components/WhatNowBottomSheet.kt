@@ -44,6 +44,7 @@ fun WhatNowBottomSheet(
     onRefreshAlternative: () -> Unit,
     onToggleBookmark: (String) -> Unit,
     onToggleVisited: (String) -> Unit,
+    onNavigateInApp: ((Place) -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -395,6 +396,10 @@ fun WhatNowBottomSheet(
                     SuggestionCard(
                         result = item,
                         onNavigate = {
+                            onNavigateInApp?.invoke(item.place)
+                                ?: LocationMath.openNavigationIntent(context, item.place.lat, item.place.lng, item.place.name)
+                        },
+                        onOpenGoogleMaps = {
                             LocationMath.openNavigationIntent(context, item.place.lat, item.place.lng, item.place.name)
                         },
                         onCall = {
@@ -455,6 +460,7 @@ private fun WhatNowPillOption(
 fun SuggestionCard(
     result: SuggestionResult,
     onNavigate: () -> Unit,
+    onOpenGoogleMaps: () -> Unit = {},
     onCall: () -> Unit,
     onToggleBookmark: () -> Unit,
     onToggleVisited: () -> Unit,
@@ -596,11 +602,25 @@ fun SuggestionCard(
                     variant = ShadcnButtonVariant.Primary,
                     modifier = Modifier
                         .weight(1f)
-                        .height(40.dp)
+                        .height(40.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
                 ) {
                     Icon(Icons.Default.Navigation, contentDescription = null, modifier = Modifier.size(15.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("DẪN ĐƯỜNG", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Spacer(Modifier.width(5.dp))
+                    Text("DẪN ĐƯỜNG", fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1)
+                }
+
+                ShadcnButton(
+                    onClick = onOpenGoogleMaps,
+                    variant = ShadcnButtonVariant.Secondary,
+                    modifier = Modifier
+                        .width(88.dp)
+                        .height(40.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                ) {
+                    Icon(Icons.Default.Map, contentDescription = "Mở Google Maps", tint = SkyTelemetry, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(3.dp))
+                    Text("G.Maps", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
                 }
 
                 if (place.phone.isNotBlank()) {

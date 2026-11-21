@@ -41,6 +41,7 @@ fun MountainSosSheet(
     emergencyPhone: String,
     onSaveEmergencyPhone: (String) -> Unit,
     onNotify: (String) -> Unit,
+    onNavigateInApp: ((Place) -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -280,7 +281,10 @@ fun MountainSosSheet(
                     badgeLabel = "CỨU HỘ XE",
                     badgeVariant = ShadcnBadgeVariant.Rose,
                     onCall = { LocationMath.openDialerIntent(context, place.phone) },
-                    onNavigate = { LocationMath.openNavigationIntent(context, place.lat, place.lng, place.name) }
+                    onNavigate = {
+                        onNavigateInApp?.invoke(place)
+                            ?: LocationMath.openNavigationIntent(context, place.lat, place.lng, place.name)
+                    }
                 )
             }
 
@@ -291,7 +295,10 @@ fun MountainSosSheet(
                     badgeLabel = "CÂY XĂNG GẦN NHẤT",
                     badgeVariant = ShadcnBadgeVariant.Amber,
                     onCall = { LocationMath.openDialerIntent(context, fuelPlace.phone) },
-                    onNavigate = { LocationMath.openNavigationIntent(context, fuelPlace.lat, fuelPlace.lng, fuelPlace.name) }
+                    onNavigate = {
+                        onNavigateInApp?.invoke(fuelPlace)
+                            ?: LocationMath.openNavigationIntent(context, fuelPlace.lat, fuelPlace.lng, fuelPlace.name)
+                    }
                 )
             }
 

@@ -1031,6 +1031,202 @@
       "slot": "EVENING",
       "title": "Ăn tối Phở Chua Gia Truyền & Lên xe giường nằm về lại",
       "suggestedPlaceIds": ["pl_eat_pho_tphg"]
+    },
+    {
+      "planCode": "3N2D_MOTORBIKE_LLC",
+      "dayNumber": 1,
+      "slot": "MORNING",
+      "title": "Xuất phát sớm 06:30 Km0 TP. Hà Giang -> Dốc Bắc Sum -> Quản Bạ",
+      "suggestedPlaceIds": ["pl_km0", "pl_fuel_tphg", "pl_doc_bac_sum", "pl_cong_troi_quan_ba", "pl_nui_doi_quan_ba"]
+    },
+    {
+      "planCode": "3N2D_MOTORBIKE_LLC",
+      "dayNumber": 1,
+      "slot": "NOON",
+      "title": "Ăn trưa Phở Tráng Kìm -> Cây Cô Đơn -> Rừng Thông Yên Minh",
+      "suggestedPlaceIds": ["pl_eat_trang_kim", "pl_cay_nghien_co_don", "pl_rung_thong_yen_minh", "pl_fuel_yen_minh"]
+    },
+    {
+      "planCode": "3N2D_MOTORBIKE_LLC",
+      "dayNumber": 1,
+      "slot": "AFTERNOON",
+      "title": "Dốc Thẩm Mã -> Đổ xăng Phố Cáo -> Dinh Vua Mèo -> Bản Lô Lô Chải",
+      "suggestedPlaceIds": ["pl_doc_tham_ma", "pl_fuel_pho_cao", "pl_nha_cua_pao", "pl_dinh_vua_meo", "pl_lo_lo_chai"]
+    },
+    {
+      "planCode": "3N2D_MOTORBIKE_LLC",
+      "dayNumber": 1,
+      "slot": "EVENING",
+      "title": "Nghỉ đêm nhà trình tường Lô Lô Chải & Cà phê Cực Bắc ngắm sao",
+      "suggestedPlaceIds": ["pl_cafe_cuc_bac"]
+    },
+    {
+      "planCode": "3N2D_MOTORBIKE_LLC",
+      "dayNumber": 2,
+      "slot": "MORNING",
+      "title": "Săn bình minh Cột cờ Lũng Cú -> Về Đồng Văn ăn Bánh cuốn & Đổ xăng",
+      "suggestedPlaceIds": ["pl_cot_co_lung_cu", "pl_eat_banh_cuon_dv", "pl_pho_co_dong_van", "pl_fuel_dong_van"]
+    },
+    {
+      "planCode": "3N2D_MOTORBIKE_LLC",
+      "dayNumber": 2,
+      "slot": "NOON",
+      "title": "Cà phê Phố Cổ Đồng Văn & Ăn trưa nghỉ sức trước đèo Mã Pì Lèng",
+      "suggestedPlaceIds": ["pl_cafe_pho_co_dv", "pl_eat_thang_co_dv"]
+    },
+    {
+      "planCode": "3N2D_MOTORBIKE_LLC",
+      "dayNumber": 2,
+      "slot": "AFTERNOON",
+      "title": "Đỉnh đèo Mã Pì Lèng -> Sông Nho Quế (Tả Làng) -> Làng Pả Vi",
+      "suggestedPlaceIds": ["pl_deo_ma_pi_leng", "pl_cafe_panorama", "pl_ben_thuyen_ta_lang", "pl_lang_pa_vi"]
+    },
+    {
+      "planCode": "3N2D_MOTORBIKE_LLC",
+      "dayNumber": 2,
+      "slot": "EVENING",
+      "title": "Nghỉ đêm Làng H'Mông Pả Vi & Ẩm thực chợ đêm Mèo Vạc",
+      "suggestedPlaceIds": ["pl_eat_meo_vac", "pl_lang_pa_vi"]
+    },
+    {
+      "planCode": "3N2D_MOTORBIKE_LLC",
+      "dayNumber": 3,
+      "slot": "MORNING",
+      "title": "Đổ đầy xăng Mèo Vạc -> Cua Chữ M -> Ngã ba Mậu Duệ",
+      "suggestedPlaceIds": ["pl_fuel_meo_vac", "pl_cua_chu_m", "pl_nga_ba_mau_due"]
+    },
+    {
+      "planCode": "3N2D_MOTORBIKE_LLC",
+      "dayNumber": 3,
+      "slot": "NOON",
+      "title": "Về thung lũng Du Già -> Ăn trưa nhà sàn & Thác Bản Tiên",
+      "suggestedPlaceIds": ["pl_du_gia_homestay", "pl_thac_du_gia", "pl_fuel_mau_due"]
+    },
+    {
+      "planCode": "3N2D_MOTORBIKE_LLC",
+      "dayNumber": 3,
+      "slot": "AFTERNOON",
+      "title": "Vượt đèo Đường Thượng - Thái An -> Về TP. Hà Giang trước 17:15",
+      "suggestedPlaceIds": ["pl_sos_du_gia", "pl_km0"]
+    },
+    {
+      "planCode": "3N2D_MOTORBIKE_LLC",
+      "dayNumber": 3,
+      "slot": "EVENING",
+      "title": "Ăn tối Phở Chua Hà Giang, trả xe & Kết thúc hành trình trọn vẹn",
+      "suggestedPlaceIds": ["pl_eat_pho_tphg", "pl_km0"]
+    },
+    {
+      "planCode": "4N3D_MOTORBIKE_LLC",
+      "dayNumber": 1,
+      "slot": "MORNING",
+      "title": "Xuất phát Km0 TP. Hà Giang -> Dốc Bắc Sum -> Cổng Trời Quản Bạ",
+      "suggestedPlaceIds": ["pl_km0", "pl_fuel_tphg", "pl_doc_bac_sum", "pl_cong_troi_quan_ba", "pl_cafe_cong_troi"]
+    },
+    {
+      "planCode": "4N3D_MOTORBIKE_LLC",
+      "dayNumber": 1,
+      "slot": "NOON",
+      "title": "Núi Đôi Quản Bạ -> Ăn trưa Phở Tráng Kìm -> Cầu Cán Tỷ",
+      "suggestedPlaceIds": ["pl_nui_doi_quan_ba", "pl_fuel_tam_son", "pl_eat_trang_kim", "pl_sos_quan_ba"]
+    },
+    {
+      "planCode": "4N3D_MOTORBIKE_LLC",
+      "dayNumber": 1,
+      "slot": "AFTERNOON",
+      "title": "Cây Nghiến Cô Đơn -> Rừng Thông Yên Minh -> Nghỉ chân TT. Yên Minh",
+      "suggestedPlaceIds": ["pl_cay_nghien_co_don", "pl_rung_thong_yen_minh", "pl_fuel_yen_minh", "pl_cafe_yen_minh"]
+    },
+    {
+      "planCode": "4N3D_MOTORBIKE_LLC",
+      "dayNumber": 1,
+      "slot": "EVENING",
+      "title": "Ăn tối & Nghỉ đêm tại Thị trấn Yên Minh",
+      "suggestedPlaceIds": ["pl_eat_com_yen_minh", "pl_sos_yen_minh"]
+    },
+    {
+      "planCode": "4N3D_MOTORBIKE_LLC",
+      "dayNumber": 2,
+      "slot": "MORNING",
+      "title": "Dốc Thẩm Mã -> Sủng Là (Nhà của Pao) -> Thị trấn cổ Phố Bảng",
+      "suggestedPlaceIds": ["pl_doc_tham_ma", "pl_fuel_pho_cao", "pl_nha_cua_pao", "pl_pho_bang_co_tran"]
+    },
+    {
+      "planCode": "4N3D_MOTORBIKE_LLC",
+      "dayNumber": 2,
+      "slot": "NOON",
+      "title": "Dinh Thự Họ Vương (Vua Mèo) & Ăn trưa Sà Phìn",
+      "suggestedPlaceIds": ["pl_dinh_vua_meo", "pl_eat_sa_phin"]
+    },
+    {
+      "planCode": "4N3D_MOTORBIKE_LLC",
+      "dayNumber": 2,
+      "slot": "AFTERNOON",
+      "title": "Chinh phục Cột cờ Quốc gia Lũng Cú -> Nhận phòng Bản Lô Lô Chải",
+      "suggestedPlaceIds": ["pl_cot_co_lung_cu", "pl_lo_lo_chai"]
+    },
+    {
+      "planCode": "4N3D_MOTORBIKE_LLC",
+      "dayNumber": 2,
+      "slot": "EVENING",
+      "title": "Nghỉ đêm nhà trình tường Lô Lô Chải & Cà phê Cực Bắc",
+      "suggestedPlaceIds": ["pl_cafe_cuc_bac"]
+    },
+    {
+      "planCode": "4N3D_MOTORBIKE_LLC",
+      "dayNumber": 3,
+      "slot": "MORNING",
+      "title": "Xuống Phố cổ Đồng Văn ăn Bánh cuốn -> Đổ xăng -> Vách Đá Trắng & Mã Pì Lèng",
+      "suggestedPlaceIds": ["pl_pho_co_dong_van", "pl_eat_banh_cuon_dv", "pl_fuel_dong_van", "pl_vach_da_trang", "pl_deo_ma_pi_leng"]
+    },
+    {
+      "planCode": "4N3D_MOTORBIKE_LLC",
+      "dayNumber": 3,
+      "slot": "NOON",
+      "title": "Đi thuyền Sông Nho Quế - Hẻm Tu Sản & Nghỉ chân Làng Pả Vi",
+      "suggestedPlaceIds": ["pl_ben_thuyen_ta_lang", "pl_lang_pa_vi", "pl_eat_meo_vac"]
+    },
+    {
+      "planCode": "4N3D_MOTORBIKE_LLC",
+      "dayNumber": 3,
+      "slot": "AFTERNOON",
+      "title": "Tiếp xăng Mèo Vạc -> Cua Chữ M -> Ngã ba Mậu Duệ -> Bản Tiên Du Già",
+      "suggestedPlaceIds": ["pl_fuel_meo_vac", "pl_cua_chu_m", "pl_nga_ba_mau_due", "pl_du_gia_homestay"]
+    },
+    {
+      "planCode": "4N3D_MOTORBIKE_LLC",
+      "dayNumber": 3,
+      "slot": "EVENING",
+      "title": "Nghỉ đêm nhà sàn người Tày bên cánh đồng lúa Du Già",
+      "suggestedPlaceIds": ["pl_du_gia_homestay"]
+    },
+    {
+      "planCode": "4N3D_MOTORBIKE_LLC",
+      "dayNumber": 4,
+      "slot": "MORNING",
+      "title": "Thác Bản Tiên Du Già -> Đổ đầy xăng Petrolimex Du Già",
+      "suggestedPlaceIds": ["pl_thac_du_gia", "pl_fuel_mau_due"]
+    },
+    {
+      "planCode": "4N3D_MOTORBIKE_LLC",
+      "dayNumber": 4,
+      "slot": "NOON",
+      "title": "Vượt cung đèo Đường Thượng - Thái An hùng vĩ",
+      "suggestedPlaceIds": ["pl_sos_du_gia"]
+    },
+    {
+      "planCode": "4N3D_MOTORBIKE_LLC",
+      "dayNumber": 4,
+      "slot": "AFTERNOON",
+      "title": "Về lại Cột mốc Km0 TP. Hà Giang & Cà phê Núi Cấm",
+      "suggestedPlaceIds": ["pl_km0", "pl_cafe_nui_cam"]
+    },
+    {
+      "planCode": "4N3D_MOTORBIKE_LLC",
+      "dayNumber": 4,
+      "slot": "EVENING",
+      "title": "Ăn tối Phở Chua Gia Truyền & Lên xe giường nằm về lại",
+      "suggestedPlaceIds": ["pl_eat_pho_tphg"]
     }
   ],
   "checklist_seed": [

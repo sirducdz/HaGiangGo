@@ -661,7 +661,12 @@ class HaGiangDatabase(private val context: Context) :
             }
 
             val exact = allSeeded.filter { it.planCode == planCode }
-            val fallbackCode = if (planCode.startsWith("4N3D")) "4N3D_MOTORBIKE" else "3N2D_MOTORBIKE"
+            val fallbackCode = when {
+                planCode.startsWith("4N3D") && planCode.endsWith("_LLC") -> "4N3D_MOTORBIKE_LLC"
+                planCode.startsWith("4N3D") -> "4N3D_MOTORBIKE"
+                planCode.endsWith("_LLC") -> "3N2D_MOTORBIKE_LLC"
+                else -> "3N2D_MOTORBIKE"
+            }
             val matched = exact.ifEmpty {
                 allSeeded.filter { it.planCode == fallbackCode }.map { it.copy(planCode = planCode) }
             }

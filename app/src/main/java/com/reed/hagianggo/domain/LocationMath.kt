@@ -119,4 +119,85 @@ object LocationMath {
             }
         }
     }
+
+    /**
+     * Tính góc phương vị [0, 360) độ theo chiều kim đồng hồ từ hướng Bắc giữa 2 tọa độ.
+     */
+    fun calculateBearingDeg(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Float {
+        val phi1 = Math.toRadians(lat1)
+        val phi2 = Math.toRadians(lat2)
+        val dLambda = Math.toRadians(lon2 - lon1)
+        val y = sin(dLambda) * cos(phi2)
+        val x = cos(phi1) * sin(phi2) - sin(phi1) * cos(phi2) * cos(dLambda)
+        if (x == 0.0 && y == 0.0) return 0f
+        val deg = Math.toDegrees(atan2(y, x))
+        return (((deg % 360.0) + 360.0) % 360.0).toFloat()
+    }
+
+    /**
+     * Hiệu góc ngắn nhất nằm trong (-180, 180] độ giữa 2 góc phương vị.
+     */
+    fun normalizeAngleDeltaDeg(fromDeg: Float, toDeg: Float): Float {
+        var delta = ((toDeg - fromDeg) % 360f + 540f) % 360f - 180f
+        if (delta <= -180f) delta += 360f
+        return delta
+    }
+
+    /**
+     * Làm mượt góc xoay qua ranh giới 355° <-> 5° để la bàn bản đồ không bị quay ngược vòng.
+     */
+    fun smoothBearingDeg(currentDeg: Float, targetDeg: Float, alpha: Float = 0.35f): Float {
+        val clampedAlpha = alpha.coerceIn(0.05f, 1f)
+        val delta = normalizeAngleDeltaDeg(currentDeg, targetDeg)
+        val next = currentDeg + delta * clampedAlpha
+        return ((next % 360f) + 360f) % 360f
+    }
+
+    /**
+     * Khoảng cách vuông góc (tính bằng mét) từ điểm P tới đoạn thẳng [A, B] trên mặt cầu xấp xỉ phẳng.
+     */
+    fun pointToSegmentDistanceMeters(
+        pLat: Double,
+        pLng: Double,
+        aLat: Double,
+        aLng: Double,
+        bLat: Double,
+        bLng: Double
+    ): Double {
+        val midLatRad = Math.toRadians((aLat + bLat) * 0.5)
+        val metersPerDegLat = 111_132.92
+        val metersPerDegLng = 111_412.84 * cos(midLatRad).coerceAtLeast(0.01)
+
+        val ax = (aLng - pLng) * metersPerDegLng
+        val ay = (aLat - pLat) * metersPerDegLat
+        val bx = (bLng - pLng) * metersPerDegLng
+        val by = (bLat - pLat) * metersPerDegLat
+
+        val dx = bx - ax
+        val dy = by - ay
+        val lenSq = dx * dx + dy * dy
+        if (lenSq <= 1e-6) {
+            return sqrt(ax * ax + ay * ay)
+        }
+        val t = (-(ax * dx + ay * dy) / lenSq).coerceIn(0.0, 1.0)
+        val projX = ax + t * dx
+        val projY = ay + t * dy
+        return sqrt(projX * projX + projY * projY)
+    }
+
+    /**
+     * Định dạng cự ly dẫn đường ngắn gọn dễ liếc khi đang lái xe.
+     */
+    fun formatNavigationDistance(meters: Double): String {
+        val safe = meters.coerceAtLeast(0.0)
+        return when {
+            safe < 100.0 -> "${((safe / 5.0).roundToInt() * 5).coerceAtLeast(0)} m"
+            safe < 1000.0 -> {
+                val rounded = ((safe / 10.0).roundToInt() * 10)
+                if (rounded >= 1000) "1.0 km" else "$rounded m"
+            }
+            safe < 10_000.0 -> String.format(Locale.US, "%.1f km", safe / 1000.0)
+            else -> "${(safe / 1000.0).roundToInt()} km"
+        }
+    }
 }

@@ -38,6 +38,7 @@ fun LiveRideCockpitSheet(
     fuelAdvisory: FuelAdvisory? = null,
     onRefuelFull: () -> Unit = {},
     onOpenSos: () -> Unit = {},
+    onNavigateInApp: ((Place) -> Unit)? = null,
     onPause: () -> Unit,
     onResume: () -> Unit,
     onStop: () -> Unit,
@@ -383,7 +384,8 @@ fun LiveRideCockpitSheet(
 
                             ShadcnButton(
                                 onClick = {
-                                    LocationMath.openNavigationIntent(context, nextPlace.lat, nextPlace.lng, nextPlace.name)
+                                    onNavigateInApp?.invoke(nextPlace)
+                                        ?: LocationMath.openNavigationIntent(context, nextPlace.lat, nextPlace.lng, nextPlace.name)
                                 },
                                 variant = ShadcnButtonVariant.Primary,
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)

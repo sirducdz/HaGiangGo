@@ -36,6 +36,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.reed.hagianggo.domain.GoldenHourAdvisor
+import com.reed.hagianggo.domain.ItineraryEditorLogic
 import com.reed.hagianggo.domain.LocationMath
 import com.reed.hagianggo.domain.TimePacerEngine
 import com.reed.hagianggo.model.*
@@ -58,6 +59,7 @@ fun TodayScreen(
     val places by viewModel.places.collectAsState()
     val itinerarySlots by viewModel.itinerarySlots.collectAsState()
     val isItineraryCustomized by viewModel.isItineraryCustomized.collectAsState()
+    val nightStayVariant by viewModel.nightStayVariant.collectAsState()
     val activeZone by viewModel.activeZone.collectAsState()
     val currentLocation by viewModel.currentLocation.collectAsState()
     val isOutsideHaGiang by viewModel.isOutsideHaGiang.collectAsState()
@@ -75,6 +77,11 @@ fun TodayScreen(
     val activeStopTimer by viewModel.activeStopTimer.collectAsState()
 
     var selectedDay by remember { mutableIntStateOf(1) }
+    LaunchedEffect(config.durationDays) {
+        if (selectedDay > config.durationDays) {
+            selectedDay = config.durationDays
+        }
+    }
     var highlightedPlaceId by remember { mutableStateOf<String?>(null) }
     var isEditItineraryMode by remember { mutableStateOf(false) }
     var showAddPlacePicker by remember { mutableStateOf(false) }
@@ -675,7 +682,7 @@ fun TodayScreen(
                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
                                 color = ElectricOrangeHover,
                                 modifier = Modifier.clickable {
-                                    LocationMath.openNavigationIntent(context, station.lat, station.lng, station.name)
+                                    viewModel.requestNavigationTo(station)
                                 }
                             )
                         }
@@ -702,7 +709,24 @@ fun TodayScreen(
         }
 
         // =====================================================================
-        // 3. KHAY CHỌN NGÀY TRƯỢT LÒ XO (SLIDING PILL DAY TABS)
+        // 3. BỘ CHỌN LỊCH TRÌNH LINH HOẠT (ĐÊM ĐỒNG VĂN ↔ LÔ LÔ CHẢI & 3N2Đ/4N3Đ)
+        // =====================================================================
+        item(key = "flexible_itinerary_switcher") {
+            FlexibleItinerarySwitcherCard(
+                duration = config.duration,
+                nightStayVariant = nightStayVariant,
+                isCustomized = isItineraryCustomized,
+                onSelectDuration = { days ->
+                    viewModel.updateTripConfig(config.withDurationDays(days))
+                },
+                onSelectNightStay = { variant ->
+                    viewModel.setNightStayVariant(variant)
+                }
+            )
+        }
+
+        // =====================================================================
+        // 3B. KHAY CHỌN NGÀY TRƯỢT LÒ XO (SLIDING PILL DAY TABS)
         // =====================================================================
         item(key = "day_selector") {
             val daysList = (1..config.durationDays).toList()
@@ -798,11 +822,11 @@ fun TodayScreen(
         // 4. BIỂU ĐỒ MẶT CẮT ĐỘ CAO ĐÈO ĐỘNG (ALLTRAILS ELEVATION PROFILE)
         // =====================================================================
         item(key = "elevation_profile_card") {
-            val dayRouteHint = when (selectedDay) {
-                1 -> "TP. Hà Giang (Km0) ➔ Bắc Sum ➔ Cổng Trời ➔ Yên Minh ➔ Đồng Văn (~145km)"
-                2 -> "Đồng Văn ➔ Cột Cờ Lũng Cú ➔ Lô Lô Chải ➔ Mã Pì Lèng ➔ Sông Nho Quế ➔ Pả Vi (~80km)"
-                3 -> "Mèo Vạc ➔ Cua Chữ M ➔ Mậu Duệ ➔ Thác Du Già ➔ Đường Thượng (~150km)"
-                else -> "Du Già ➔ Đường Thượng ➔ Thái An ➔ Về lại Cột mốc Km0 TP. Hà Giang"
+            val dayRouteHint = remember(orderedDayPlaces, dayPacingSummary.totalRoadKm) {
+                ItineraryEditorLogic.buildDynamicDayRouteSubtitle(
+                    places = orderedDayPlaces,
+                    totalRoadKm = dayPacingSummary.totalRoadKm
+                )
             }
 
             ElevationProfileCard(
@@ -923,6 +947,9 @@ fun TodayScreen(
                         isHighlighted = highlightedPlaceId == place.id,
                         isEditMode = isEditItineraryMode,
                         onNavigate = {
+                            viewModel.requestNavigationTo(place)
+                        },
+                        onOpenGoogleMaps = {
                             LocationMath.openNavigationIntent(context, place.latitude, place.longitude, place.name)
                         },
                         onToggleVisited = { viewModel.toggleVisited(place.id) },
@@ -1005,7 +1032,7 @@ fun TodayScreen(
             },
             text = {
                 Text(
-                    "Toàn bộ các điểm bạn vừa thêm, xóa hoặc đảo thứ tự sẽ quay về lịch trình Hà Giang tiêu chuẩn.",
+                    "Toàn bộ các điểm bạn vừa thêm, xóa hoặc đảo thứ tự sẽ quay về lịch trình chuẩn (${config.duration.code} • Nghỉ ${nightStayVariant.shortTitle}).",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary
                 )
@@ -1144,6 +1171,7 @@ private fun DayTimePacerCard(
                     color = TextMuted
                 )
                 listOf(
+                    390 to "06:30",
                     420 to "07:00",
                     450 to "07:30",
                     480 to "08:00",
@@ -1598,6 +1626,7 @@ fun ItineraryPlaceCard(
     isHighlighted: Boolean = false,
     isEditMode: Boolean = false,
     onNavigate: () -> Unit,
+    onOpenGoogleMaps: () -> Unit = {},
     onToggleVisited: () -> Unit,
     onAdjustStayMin: ((Int) -> Unit)? = null,
     onStartPitStopTimer: (() -> Unit)? = null,
@@ -2073,17 +2102,204 @@ fun ItineraryPlaceCard(
                         }
                     }
 
-                    ShadcnButton(
-                        onClick = onNavigate,
-                        variant = ShadcnButtonVariant.Primary,
-                        modifier = Modifier.fillMaxWidth().height(37.dp),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(Icons.Default.Directions, contentDescription = null, modifier = Modifier.size(15.dp))
-                        Spacer(modifier = Modifier.width(5.dp))
-                        Text("Dẫn đường Google Maps", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        ShadcnButton(
+                            onClick = onNavigate,
+                            variant = ShadcnButtonVariant.Primary,
+                            modifier = Modifier.weight(1.3f).height(37.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
+                        ) {
+                            Icon(Icons.Default.Directions, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(modifier = Modifier.width(5.dp))
+                            Text("Dẫn đường", fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1)
+                        }
+
+                        ShadcnButton(
+                            onClick = onOpenGoogleMaps,
+                            variant = ShadcnButtonVariant.Secondary,
+                            modifier = Modifier.weight(0.7f).height(37.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                        ) {
+                            Icon(Icons.Default.Map, contentDescription = "Mở Google Maps", tint = SkyTelemetry, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("G.Maps", fontWeight = FontWeight.SemiBold, fontSize = 11.5.sp, maxLines = 1)
+                        }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FlexibleItinerarySwitcherCard(
+    duration: TripDuration,
+    nightStayVariant: NightStayVariant,
+    isCustomized: Boolean,
+    onSelectDuration: (Int) -> Unit,
+    onSelectNightStay: (NightStayVariant) -> Unit
+) {
+    val nightNum = if (duration == TripDuration.DAYS_4_NIGHTS_3) 2 else 1
+    val is4N3D = duration == TripDuration.DAYS_4_NIGHTS_3
+
+    val (tipBg, tipFg, tipText) = when {
+        nightStayVariant == NightStayVariant.LO_LO_CHAI && is4N3D -> Triple(
+            SkyTelemetrySoft,
+            SkyTelemetry,
+            "✨ Đêm 1 Yên Minh • Đêm 2 ngủ bản Lô Lô Chải săn mây • Ngày 3 về Đồng Văn & Mã Pì Lèng."
+        )
+        nightStayVariant == NightStayVariant.LO_LO_CHAI -> Triple(
+            AmberWarningSoft,
+            AmberWarningText,
+            "⚡ Mẹo: Xuất phát ~06:30 & đổ xăng Phố Cáo • Sáng Ngày 2 không lặp đường."
+        )
+        is4N3D -> Triple(
+            EmeraldGreenSoft,
+            EmeraldGreenText,
+            "✓ Đêm 1 Yên Minh • Đêm 2 Phố cổ Đồng Văn • Đêm 3 Du Già thong thả."
+        )
+        else -> Triple(
+            EmeraldGreenSoft,
+            EmeraldGreenText,
+            "✓ Dễ về kịp trước 17:15 • Tối dạo phố cổ, sáng Ngày 2 lên Cột cờ Lũng Cú."
+        )
+    }
+
+    ShadcnCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        backgroundColor = SurfaceWhite,
+        borderColor = BorderSubtle
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        Icons.Default.SwapHoriz,
+                        contentDescription = null,
+                        tint = ElectricOrange,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = "LỘ TRÌNH LINH HOẠT",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 0.4.sp
+                        ),
+                        color = TextPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (isCustomized) {
+                        ShadcnBadge(text = "Đã tùy biến", variant = ShadcnBadgeVariant.Sky)
+                    }
+                }
+
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(9.dp))
+                        .background(SurfaceMuted)
+                        .padding(2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    listOf(3 to "3N2Đ", 4 to "4N3Đ").forEach { (days, label) ->
+                        val selected = duration.totalDays == days
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(7.dp))
+                                .background(if (selected) ElectricOrange else Color.Transparent)
+                                .springClickable { onSelectDuration(days) }
+                                .padding(horizontal = 8.dp, vertical = 3.5.dp)
+                        ) {
+                            Text(
+                                text = label,
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (selected) Color.White else TextSecondary
+                            )
+                        }
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(SurfaceMuted)
+                    .padding(3.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                NightStayVariant.entries.forEach { variant ->
+                    val selected = nightStayVariant == variant
+                    val icon = if (variant == NightStayVariant.LO_LO_CHAI) "🏡" else "🏮"
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (selected) SurfaceWhite else Color.Transparent)
+                            .then(
+                                if (selected) {
+                                    Modifier.border(BorderStroke(1.dp, ElectricOrangeBorder), RoundedCornerShape(10.dp))
+                                } else {
+                                    Modifier
+                                }
+                            )
+                            .springClickable { onSelectNightStay(variant) }
+                            .padding(horizontal = 8.dp, vertical = 7.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(1.dp)
+                        ) {
+                            Text(
+                                text = "$icon Đêm $nightNum: ${variant.shortTitle}",
+                                fontSize = 11.5.sp,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
+                                color = if (selected) TextPrimary else TextSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = variant.tagline,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = if (selected) ElectricOrangeHover else TextMuted,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(9.dp))
+                    .background(tipBg)
+                    .padding(horizontal = 9.dp, vertical = 6.dp)
+            ) {
+                Text(
+                    text = tipText,
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                    color = tipFg
+                )
             }
         }
     }

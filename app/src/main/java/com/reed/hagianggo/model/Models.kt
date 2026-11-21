@@ -457,6 +457,117 @@ data class QuickSnapRequest(
     val defaultTitle: String = ""
 )
 
+// ====== In-App Turn-by-Turn & Offline Loop Navigation Models ======
+
+data class LocationTelemetry(
+    val lat: Double,
+    val lng: Double,
+    val altitudeM: Double = 0.0,
+    val speedKmh: Float = 0f,
+    val bearingDeg: Float = 0f,
+    val hasBearing: Boolean = false,
+    val accuracyM: Float = 0f,
+    val timestampMs: Long = System.currentTimeMillis()
+)
+
+enum class RouteSource(val badgeLabel: String) {
+    OSRM_ONLINE("OSRM LIVE"),
+    OSRM_CACHED("OSRM CACHE"),
+    OFFLINE_LOOP_GRAPH("OFFLINE ĐÈO")
+}
+
+enum class ManeuverType {
+    DEPART,
+    STRAIGHT,
+    SLIGHT_LEFT,
+    LEFT,
+    SHARP_LEFT,
+    SLIGHT_RIGHT,
+    RIGHT,
+    SHARP_RIGHT,
+    UTURN,
+    ROUNDABOUT,
+    MERGE,
+    ARRIVE
+}
+
+data class NavigationStep(
+    val index: Int,
+    val instructionVi: String,
+    val roadName: String = "",
+    val maneuver: ManeuverType,
+    val distanceMeters: Double,
+    val durationSeconds: Int,
+    val maneuverLat: Double,
+    val maneuverLng: Double,
+    val routePointIndex: Int
+)
+
+data class NavigationRoute(
+    val originLat: Double,
+    val originLng: Double,
+    val destination: Place,
+    val polyline: List<Pair<Double, Double>>,
+    val steps: List<NavigationStep>,
+    val totalDistanceMeters: Double,
+    val totalDurationSeconds: Int,
+    val source: RouteSource,
+    val originLabel: String,
+    val computedAtMillis: Long = System.currentTimeMillis()
+)
+
+enum class NavCameraFollowMode {
+    HEADING_UP,
+    NORTH_UP_FOLLOW,
+    FREE_PAN
+}
+
+data class ActiveNavigationState(
+    val destination: Place,
+    val route: NavigationRoute? = null,
+    val isLoadingRoute: Boolean = true,
+    val isRerouting: Boolean = false,
+    val isOffRoute: Boolean = false,
+    val offRouteDistanceMeters: Double = 0.0,
+    val isGoingWrongWay: Boolean = false,
+    val wrongWayBacktrackMeters: Double = 0.0,
+    val bestMinRemainingMeters: Double = Double.POSITIVE_INFINITY,
+    val matchedSegmentIndex: Int = 0,
+    val remainingDistanceMeters: Double = 0.0,
+    val remainingDurationMin: Int = 0,
+    val etaMinutesOfDay: Int = 0,
+    val currentStepIndex: Int = 0,
+    val distanceToNextManeuverMeters: Double = 0.0,
+    val elevationDeltaMeters: Int = 0,
+    val hasArrived: Boolean = false,
+    val followMode: NavCameraFollowMode = NavCameraFollowMode.HEADING_UP,
+    val isVoiceEnabled: Boolean = false,
+    val forceFromHaGiangOrigin: Boolean = false,
+    val isUsingZonePreviewOrigin: Boolean = false,
+    val errorHint: String? = null
+)
+
+enum class NavigationMapPreference(val code: String, val shortLabel: String, val title: String) {
+    IN_APP("IN_APP", "Trong app", "Dẫn đường trong Hà Giang Go"),
+    ASK_EVERY_TIME("ASK", "Hỏi mỗi lần", "Hỏi mỗi lần bấm Dẫn đường"),
+    GOOGLE_MAPS("GMAPS", "Google Maps", "Mở Google Maps như trước");
+
+    companion object {
+        fun fromCode(code: String?): NavigationMapPreference =
+            entries.firstOrNull { it.code == code } ?: IN_APP
+    }
+}
+
+enum class NightStayVariant(val code: String, val shortTitle: String, val tagline: String) {
+    DONG_VAN("DONG_VAN", "Đồng Văn", "An toàn • Phố cổ"),
+    LO_LO_CHAI("LO_LO_CHAI", "Lô Lô Chải", "Bình minh Cực Bắc");
+
+    companion object {
+        fun fromCode(code: String?): NightStayVariant =
+            entries.firstOrNull { it.code.equals(code, ignoreCase = true) } ?: DONG_VAN
+    }
+}
+
 
 
 

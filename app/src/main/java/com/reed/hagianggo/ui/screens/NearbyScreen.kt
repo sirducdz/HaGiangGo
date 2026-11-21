@@ -357,6 +357,9 @@ fun NearbyScreen(
                             travelMin = travelMin,
                             vehicle = tripConfig.vehicle,
                             onNavigate = {
+                                viewModel.requestNavigationTo(place)
+                            },
+                            onOpenGoogleMaps = {
                                 LocationMath.openNavigationIntent(context, place.latitude, place.longitude, place.name)
                             },
                             onCall = {
@@ -489,6 +492,7 @@ fun NearbyPlaceCard(
     travelMin: Int,
     vehicle: VehicleType,
     onNavigate: () -> Unit,
+    onOpenGoogleMaps: () -> Unit,
     onCall: () -> Unit,
     onToggleBookmark: () -> Unit,
     modifier: Modifier = Modifier
@@ -644,11 +648,24 @@ fun NearbyPlaceCard(
                     modifier = Modifier
                         .weight(1f)
                         .height(38.dp),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
                 ) {
                     Icon(Icons.Default.Directions, contentDescription = null, modifier = Modifier.size(15.dp))
-                    Spacer(modifier = Modifier.width(5.dp))
-                    Text("Dẫn đường", fontWeight = FontWeight.Bold, fontSize = 12.5.sp)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Dẫn đường", fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1)
+                }
+
+                ShadcnButton(
+                    onClick = onOpenGoogleMaps,
+                    variant = ShadcnButtonVariant.Secondary,
+                    modifier = Modifier
+                        .width(88.dp)
+                        .height(38.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                ) {
+                    Icon(Icons.Default.Map, contentDescription = "Mở Google Maps", tint = SkyTelemetry, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text("G.Maps", fontWeight = FontWeight.SemiBold, fontSize = 11.5.sp, maxLines = 1)
                 }
 
                 if (place.phoneNumber.isNotBlank()) {
@@ -656,9 +673,9 @@ fun NearbyPlaceCard(
                         onClick = onCall,
                         variant = ShadcnButtonVariant.Secondary,
                         modifier = Modifier
-                            .weight(1f)
+                            .weight(0.85f)
                             .height(38.dp),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
                     ) {
                         Icon(
                             Icons.Default.Phone,
@@ -666,8 +683,8 @@ fun NearbyPlaceCard(
                             modifier = Modifier.size(15.dp),
                             tint = EmeraldGreenText
                         )
-                        Spacer(modifier = Modifier.width(5.dp))
-                        Text("Gọi điện", fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Gọi điện", fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1)
                     }
                 }
             }
